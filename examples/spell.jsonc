@@ -1,0 +1,31 @@
+{
+    "id": 1,
+    "name": "Unrestricted Chant", // 规章之外的咏叹诗
+    "exec": [
+        {"type": "dmg", "ratio": 3.00, "target": "all"}
+    ],
+    "judge_before":
+    [
+        {
+            "type": "query", "target": "spell.host",
+             "keyword": ["stats_up", "pos_status"]
+        },
+        {
+            "type": "compare", "op": ">", "b": 0,
+            "exec": [
+                {
+                    "type": "buff", 
+                    "target": "spell.host",
+                    "buff": {
+                        "type": "temp",
+                        "stat":{
+                            "penetrate": 0.32,
+                            "ratio_increase": 1.00 // 特殊增益：增加输出倍率 
+                        },
+                        "remove": "<AfterAttack>"
+                    }
+                }
+            ]
+        }
+    ]
+}

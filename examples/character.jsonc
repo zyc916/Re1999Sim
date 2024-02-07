@@ -1,0 +1,39 @@
+{
+    "id": 1,
+    "name": "Sonetto",
+    "afflatus": "Mineral",
+    "damage": "Real",
+    "stat":{
+        "attack":       975,
+        "health":       6783,
+        "real_def":     579,
+        "mental_def":   512,
+        "crit_rate":    0.0826,     // 暴击率
+        "crit_resist":  0.0,        // 抗暴率
+        "crit_dmg":     1.4235,     // 暴击创伤
+        "crit_def":     0.0,        // 暴击防御
+        
+        "dmg_d_increase":    0.0, // 创伤加成
+        "dmg_t_reduce":     0.0, // 受创减免
+        "incant_power":     0.0, // 术法威力
+        "ultimate_might":   0.0, // 仪式威力
+        "dmg_heal":         0.0, // 受创回复
+        "leech_rate":       0.0, // 吸血率
+        "heal_rate":        0.0, // 治疗率
+        "penetrate":        0.0, // 穿透率
+
+        "moxie_limit":      5,
+        "ultimate_cost":    5, // 至终的仪式消耗
+        "action_point":       1 // 行动点
+    },
+    "stat_now":{
+        "health_now":           6783,
+        "moxie":            2, // 激情
+        "moxie_limit":      5,
+        "ultimate_cost":    5, // 至终的仪式消耗
+        "action_point":       1 // 行动点
+        // 灵光
+    },
+    "judges": [],
+    "buffs": []
+}

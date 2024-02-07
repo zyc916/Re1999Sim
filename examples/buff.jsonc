@@ -1,0 +1,37 @@
+{
+    "id": 1,
+    "cls": "buff",
+    "name": "Burning",
+    "category": "neg_status", // 类型
+    "value": 15, // 层数 回合数 或 其它数值
+    "stat": 
+    {
+        "heal_taken_rate": -0.15 // 被治疗率 -15%
+    },
+    "host": "<Obj>", // buff依附个体
+    "from": "<Obj>", // buff来源
+    "remove": true, // 可被驱散
+    "merge": "add", // 同效果如何叠加 add 层数叠加 ind 每个独立 no 不允许叠加，条件覆盖
+    "add_limit": 30, //"叠加数量上限"
+    "visible": true, // 可显示
+    "bind": [], // 纯判定绑定
+    "decrease": // 减少时判定，value被传入为%v0，最后改为新的返回值
+    [
+        {
+            "cls": "judge",
+            "trigger": "RoundEnd",
+            "type": "series",
+            "host": "<Obj>", // 判定发起者
+            "judges":[
+                {"type": "math", "op": "/", "b": 2}, // 将层数除以二
+                {"type": "func", "f": "floor"}, // 向下取整
+                {"type": "set", "name": "%rv"}, // 将结果保存到%rv变量
+                {"type": "get", "path": "host.host.stat_now.attack"}, // 获取依附者的攻击属性
+                {"type": "math", "op": "*", "b": 0.05}, // 乘以4%
+                {"type": "math", "op": "*", "b": "%v0"}, // 乘以层数
+                {"type": "dmg", "target": "<host>", "damage_kind": "genesis"}, // 造成本源创伤
+                {"type": "return", "var": "%rv"} // 返回折半的值
+            ]
+        }
+    ]
+}
