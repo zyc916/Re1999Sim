@@ -32,8 +32,15 @@ function deepCopy<T>(obj: T, hash = new WeakMap()): T {
 
 namespace J {
     export abstract class Judge {
+        trigger: Signal = '';
         static variables: Record<string, any> = new Map<string, any>();
         abstract judge_me(arg: any, sub: Character, obj: Character): any;
+
+        static judgeS(judges: J.Judge[], source: Character, target: Character) {
+            for (let judge of judges) {
+                judge.judge_me(undefined, source, target);
+            }
+        }
     }
     export class FMath extends Judge {
         operator: string = "+";
@@ -298,14 +305,23 @@ class Buff {
     merge: 'add' | 'individually' | 'no' = 'no';
 
     stat_inc: StatInc = {};
-    attach_judge: J.Judge[] = new Array<J.Judge>();
+    judge: J.Judge[] = new Array<J.Judge>();
     decrease: J.Judge[] = new Array<J.Judge>();
     host_character: Character = stage.Background;
+
+    signal(sign: string, source: Character, target: Character) {
+        for (let judge of this.judge) {
+            if (judge.trigger === sign) {
+                judge.judge_me(undefined, source, target);
+            }
+        }
+    }
 }
 class Item {
     stat_inc: StatInc = {};
     attach: J.Judge[] = new Array<J.Judge>();
 }
+
 class Behavior {
     selector: Selector = "<aim>";
     type: "damage" | "heal" | "shield" | "buff";
@@ -321,7 +337,7 @@ class Behavior {
                 let statC = origin.stat;
                 let statT = target.stat;
                 let rely_value = b.rely_obj === "self" ? statC[b.rely_name] : statT[b.rely_name];
-                // TODO: triggers before spell cast, to increase ratio
+                if (spell && spell.judge_before) { J.Judge.judgeS(spell.judge_before, origin, aim); }
                 if (b.type == "damage") {
                     let damage = 0;
                     let crit_part = 1.0;
@@ -357,9 +373,8 @@ class Behavior {
                 if (b.buff) {
                     target.add_buff(b.buff);
                 }
+                if (spell && spell.judge_after) { J.Judge.judgeS(spell.judge_after, origin, aim); }
             }
-
-
         }
     }
 }
@@ -368,6 +383,8 @@ class Behavior {
 class Spell {
     energy: "incant" | "ultimate" = "incant";
     category: "buff" | "debuff" | "attack" | "heal" | "shield" | "versatile";
+    judge_before: J.Judge[] = [];
+    judge_after: J.Judge[] = [];
     behaviors: Behavior[] = new Array<Behavior>();
     cast(origin: Character, aim: Character) {
         signal('on_' + this.energy, origin, aim);
@@ -394,7 +411,7 @@ class Card {
     arcanal_index: number = -1;
 }
 
-type Selector = | "<aim>" | "<self>" | "<opposite>" | "<us>" | "<player>" | "<enemy>" | "<random_us>" | "<random_opp>";
+type Selector = "<aim2>" | "<aim>" | "<self>" | "<opposite>" | "<us>" | "<player>" | "<enemy>" | "<random_us>" | "<random_opp>";
 type Afflatus = "star" | "mineral" | "beast" | "plant" | "intellect" | "spirit" | "null";
 
 class Character {
@@ -425,7 +442,7 @@ class Character {
         this.id = Character.count;
     }
 
-    [Symbol.toPrimitive](hint) {
+    [Symbol.toPrimitive](hint: 'string') {
         if (hint === "string") {
             return `${this.name} #${this.id}`;
         }
@@ -492,13 +509,24 @@ class Character {
         this.ability.get(name)?.cast(level, this, aim);
     }
 
+    signal(sign: string, target: Character) {
+        for (let judge of this.judges) {
+            if (judge.trigger === sign) {
+                judge.judge_me(undefined, this, target);
+            }
+        }
+        for (let [_, buff] of this.buffs) {
+            buff.signal(sign, this, target);
+        }
+    }
+
     damage_me(dmg: number) {
         if (this.stat.shield > dmg) this.stat.shield -= dmg;
         else if (this.stat.shield) {
             dmg -= this.stat.shield;
             this.stat.shield = 0;
             this.stat.health_now -= dmg;
-            signal('on_shield_broke', this, this); // FIXME
+            signal('on_shield_broke', this, this); /// XXX
         } else {
             dmg -= this.stat.shield;
         }
@@ -537,7 +565,6 @@ class Character {
                     }
                 } else if (buff.merge == 'individually') {
                     this.buffs.set(new_buff.id, new_buff);
-                    // [ ] Buff.attach 交给buff的方法自己处理
                     flag = true;
                 } else {
                     if (new_buff.level > buff.level) {
@@ -635,6 +662,14 @@ class Stage {
         Stage.shuffle(this.card_pool);
     }
 
+    static choose(side: number, avoid?: Character): Character {
+        let choice: Character;
+        do {
+            choice = stage.stage[side][Math.random() * stage.stage[side].length];
+        } while (choice == avoid);
+        return choice;
+    }
+
     static select(selector: Selector, origin: Character, aim: Character): Character[] {
         switch (selector) {
             case "<self>":
@@ -643,6 +678,8 @@ class Stage {
                 return stage.stage[origin.side];
             case "<aim>":
                 return [aim];
+            case "<aim2>":
+                return [aim, this.choose(aim.side, aim)];
             case "<opposite>":
                 return stage.stage[1 - origin.side];
             case "<player>":
@@ -650,24 +687,18 @@ class Stage {
             case "<enemy>":
                 return stage.stage[1];
             case "<random_us>":
-                return [
-                    stage.stage[origin.side][
-                    Math.random() * stage.stage[origin.side].length
-                    ],
-                ];
+                return [this.choose(origin.side)];
             case "<random_opp>":
-                return [
-                    stage.stage[origin.side][
-                    Math.random() * stage.stage[origin.side].length
-                    ],
-                ];
+                return [this.choose(1 - origin.side)];
         }
     }
 }
 
 function signal(sign: Signal, source: Character, target: Character) {
-    // TODO
+    source.signal(sign, target);
 }
+
+
 
 type Signal = string;
 
@@ -675,8 +706,14 @@ var stage = new Stage();
 var repl = console.log;
 
 function test() {
+    let damage200 = new Behavior();
+    damage200.ratio = 2.00;
     let s1 = new Spell();
+    s1.behaviors.push(damage200);
+    let a1 = new Arcanal();
+
     let c1 = new Character();
+
 }
 
 (function main() { })();
