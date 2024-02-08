@@ -1,40 +1,15 @@
 // @ts-check
 "use strict";
 
-function deepCopy<T>(obj: T, hash = new WeakMap()): T {
-    if (typeof obj !== "object" || obj === null) {
-        return obj;
-    }
-    if (hash.has(obj)) {
-        return hash.get(obj);
-    }
-    // @ts-ignore
-    let copy: any = new obj.constructor();
-    hash.set(obj, copy);
-    for (let key in obj) {
-        if (obj.hasOwnProperty(key) && !(obj[key] instanceof Character)) {
-            // 递归复制每个属性
-            copy[key] = deepCopy(obj[key], hash);
-        } else if (obj[key] instanceof Character) {
-            copy[key] = obj[key];
-        }
-    }
-    hash.delete(obj);
-    if (obj.hasOwnProperty("id")) {
-        // @ts-ignore
-        copy.id = obj.constructor.count;
-        // @ts-ignore
-        obj.constructor.count += 1;
-    }
-    // 返回复制后的新对象
-    return copy;
-}
-
 namespace J {
     export abstract class Judge {
         trigger: Signal = '';
         static variables: Record<string, any> = new Map<string, any>();
         abstract judge_me(arg: any, sub: Character, obj: Character): any;
+
+        constructor() {
+
+        }
 
         static judgeS(judges: J.Judge[], source: Character, target: Character) {
             for (let judge of judges) {
@@ -99,6 +74,7 @@ namespace J {
             let rely = this.aim === "obj" ? obj : sub;
             const parts = this.path.split(".");
             for (let i = 0; i < parts.length; i++) {
+                // @ts-ignore
                 if (rely) rely = rely[parts[i]];
                 else return undefined;
             }
@@ -249,11 +225,49 @@ namespace J {
     type Executable = JBehave | JSeries | JCompare | JProbable | JWith;
 }
 
-class Editor {
-    
-}
+interface Display { id: number; toText(): string; }
+class Editor<T extends Display> {
+    cls: T & { instances: T[]; };
+    name: string = '对象';
+    init_from?: Editor<any>;
+    table: Record<string, any> = {};
 
+    constructor(cls: T & { instances: T[]; }, table: Record<string, any>, init_from?: Editor<any>) {
+        this.cls = cls;
+        this.table = table;
+        this.init_from = init_from;
+    }
+
+    popup_select() {
+        let mask = document.getElementById('menu-mask-9');
+        if (!mask) { throw new Error('can not find menu mask'); }
+        let container = document.createElement('div');
+        container.className = 'editor-container-9';
+        let form = document.createElement('form');
+        let div1 = document.createElement('div');
+        let label = document.createElement('p');
+        label.innerText = '选择一个' + this.name;
+        let list = document.createElement('select');
+        list.id = 'instance_id';
+        for (let instance of this.cls.instances) {
+            let option = document.createElement('option');
+            option.value = instance.id.toString();
+            option.innerText = instance.toText();
+            list.appendChild(option);
+        }
+        div1.appendChild(label);
+        div1.appendChild(list);
+        form.appendChild(div1);
+        container.appendChild(form);
+        mask.appendChild(container);
+    }
+
+    on_submit() {
+
+    }
+}
 class Stat {
+    static instances: Stat[] = [];
     attack: number = 100;
     health_limit: number = 10000;
     health_now: number = 10000;
@@ -291,6 +305,7 @@ class Stat {
         );
         let o = new Stat();
         for (let k of keys) {
+            // @ts-ignore
             o[k] = (o1[k] || 0) + (o2[k] || 0);
         }
         return o;
@@ -314,6 +329,7 @@ class Buff {
     host_character: Character = stage.Background;
 
     signal(sign: string, source: Character, target: Character) {
+        console.log(sign);
         for (let judge of this.judge) {
             if (judge.trigger === sign) {
                 judge.judge_me(undefined, source, target);
@@ -328,7 +344,7 @@ class Item {
 
 class Behavior {
     selector: Selector = "<aim>";
-    type: "damage" | "heal" | "shield" | "buff";
+    type: "damage" | "heal" | "shield" | "buff" = 'buff';
     damage_type?: "real" | "mental" | "genesis";
     rely_obj: "self" | "aim" = "self";
     rely_name: keyof Stat = "attack";
@@ -368,7 +384,6 @@ class Behavior {
                         damage = b.ratio * rely_value * statC.genesis_increase * crit_part;
                     }
                     else {
-
                         let power = 1.00; // 威力
                         if (spell) power = (1 + statC[<keyof Stat>('might_' + spell.energy)]);
                         damage = b.ratio * (statC.attack - statT[<keyof Stat>(b.damage_type + '_def')] * (1 - statC.penetrate)) * (1 + statC.dmg_d_increase - statT.dmg_t_reduce) * power * crit_part * conquer;
@@ -409,7 +424,7 @@ class Behavior {
 
 class Spell {
     energy: "incant" | "ultimate" = "incant";
-    category: "buff" | "debuff" | "attack" | "heal" | "shield" | "versatile";
+    category: "buff" | "debuff" | "attack" | "heal" | "shield" | "versatile" = 'attack';
     judge_before: J.Judge[] = [];
     judge_after: J.Judge[] = [];
     behaviors: Behavior[] = new Array<Behavior>();
@@ -421,19 +436,19 @@ class Spell {
 
 class Arcanal {
     energy: "incant" | "ultimate" = "incant";
-    category: "buff" | "debuff" | "attack" | "heal" | "shield" | "versatile";
+    category: "buff" | "debuff" | "attack" | "heal" | "shield" | "versatile" = 'attack';
     spells: Spell[] = new Array();
 
     cast(level: number, origin: Character, aim: Character) {
-        deepCopy(this.spells[level - 1]).cast(origin, aim);
+        this.spells[level - 1].cast(origin, aim);
     }
 }
 
 class Card {
     temp: boolean = false;
     image: string = "";
-    energy: "incant" | "ultimate" = "incant";
-    category: "buff" | "debuff" | "attack" | "heal" | "shield" | "versatile";
+    // energy: "incant" | "ultimate" = "incant";
+    // category: "buff" | "debuff" | "attack" | "heal" | "shield" | "versatile" = 'attack';
     level: number = 1;
     arcanal_index: number = -1;
 }
@@ -444,6 +459,7 @@ type Afflatus = "star" | "mineral" | "beast" | "plant" | "intellect" | "spirit" 
 class Character {
     static afflatus4: Afflatus[] = ["star", "mineral", "beast", "plant"];
     static afflatus2: Afflatus[] = ["intellect", "spirit"];
+    static instances: Character[] = [];
     /** 双方所有角色，0为玩家方 */
     static all_char: Character[][] = [[], []];
     static count = 0;
@@ -469,6 +485,7 @@ class Character {
     constructor() {
         Character.count += 1;
         this.id = Character.count;
+        Character.instances.push(this);
     }
 
     [Symbol.toPrimitive](hint: 'string') {
@@ -504,8 +521,7 @@ class Character {
         for (const k in this.stat_now) {
             if (k.startsWith("<increase>")) {
                 // @ts-ignore
-                this.stat_now[k.slice(10)] =
-                    this.stat_now[k.slice(10)] * (1 + this.stat_now[k]);
+                this.stat_now[k.slice(10)] = this.stat_now[k.slice(10)] * (1 + this.stat_now[k]);
             }
         }
     }
@@ -543,6 +559,7 @@ class Character {
     }
 
     signal(sign: string, target: Character) {
+        console.log(sign);
         for (let judge of this.judges) {
             if (judge.trigger === sign) {
                 judge.judge_me(undefined, this, target);
@@ -563,7 +580,7 @@ class Character {
         } else {
             dmg -= this.stat.shield;
         }
-        repl(`${this.name}${this.id}受到了${dmg}伤害`);
+        repl(this + `受到了${dmg}伤害`);
         if (this.stat.health_now < 0) {
             this.stat.health_now = 0;
             signal('on_death', this, this);
@@ -575,7 +592,7 @@ class Character {
         this.stat.health_now += heal;
         if (this.stat.health_now > this.stat.health_limit) { this.stat.health_now = this.stat.health_limit; }
         if (heal > 0) {
-            repl(`${this.name}${this.id}受到了${heal}治疗`);
+            repl(this + `受到了${heal}治疗`);
         }
     }
 
@@ -618,7 +635,7 @@ class Character {
             flag = true;
         }
         if (flag) {
-            repl(`${this.name}${this.id}被成功施加了${new_buff.name}`);
+            repl(this + `被成功施加了${new_buff.name}`);
         }
         return flag;
     }
@@ -632,7 +649,7 @@ class Character {
         }
         this.stat.moxie_now += moxie;
         if (this.stat.moxie_now > this.stat.moxie_limit) { this.stat.moxie_now = this.stat.moxie_limit; }
-        repl(`${this.name}${this.id}激情增加！现在有${this.stat.moxie_now}`);
+        repl(this + `激情增加！现在有${this.stat.moxie_now}`);
     }
 
     check_ultimate(): boolean {
@@ -658,7 +675,7 @@ class Stage {
     player_limit = 0;
     /** 双方场上角色，stage[0]为玩家方 */
     stage: Character[][] = [[], []];
-    static readonly player_to_card = { 1: 4, 2: 5, 3: 7, 4: 8 };
+    static readonly player_to_card: Record<number, number> = { 1: 4, 2: 5, 3: 7, 4: 8 };
 
     static shuffle(array: any[]) {
         for (let i = array.length - 1; i > 0; i--) {
@@ -737,7 +754,10 @@ class Stage {
             this.round = 1;
         }
         signalAll('before_round', this.stage[0]);
-
+        if (this.player_cards.length < this.player_incants.length) {
+            this.popCard();
+            while (this.scanCard()) { };
+        }
     }
 
     aRound() {
@@ -808,10 +828,27 @@ var repl = console.log;
 function test() {
     let damage200 = new Behavior();
     damage200.ratio = 2.00;
+    damage200.type = 'damage';
+    damage200.damage_type = 'real';
     let s1 = new Spell();
     s1.behaviors.push(damage200);
     let a1 = new Arcanal();
+    a1.spells.push(s1);
     let c1 = new Character();
+    c1.name = "玛丽莲";
+    c1.stat.attack = 1500;
+    c1.ability.set("1", a1);
+    let c2 = new Character();
+    c2.name = "重塑之手";
+    c1.cast('1', 1, c2);
 }
 
-(function main() { })();
+function main() {
+    test();
+}
+main();
+
+
+/* document.addEventListener("DOMContentLoaded", function () {
+
+}); */
