@@ -249,6 +249,10 @@ namespace J {
     type Executable = JBehave | JSeries | JCompare | JProbable | JWith;
 }
 
+class Editor {
+    
+}
+
 class Stat {
     attack: number = 100;
     health_limit: number = 10000;
@@ -339,39 +343,62 @@ class Behavior {
                 let rely_value = b.rely_obj === "self" ? statC[b.rely_name] : statT[b.rely_name];
                 if (spell && spell.judge_before) { J.Judge.judgeS(spell.judge_before, origin, aim); }
                 if (b.type == "damage") {
+                    signal2('before_damage', origin, target);
                     let damage = 0;
                     let crit_part = 1.0;
-                    if (!b.no_crit) {
-                        if (Math.random() < (statC.crit_rate - statT.crit_anti_rate))
-                            crit_part = statC.crit_dmg - statT.crit_def;
+                    let conquer = 1.00; // 克制伤害
+                    if (origin.check_conquer(target)) {
+                        conquer = 1.30;
+                        signal2('before_conquer_damage', origin, target);
                     }
+                    if (!b.no_crit) {
+                        if (Math.random() < (statC.crit_rate - statT.crit_anti_rate)) {
+                            signal2('before_crit_damage', origin, target);
+                            signal2('before_' + b.damage_type + '_crit_damage', origin, target);
+                            crit_part = statC.crit_dmg - statT.crit_def;
+                        }
+                    }
+                    signal2('before_' + b.damage_type + '_damage', origin, target);
+                    origin.initStat();
+                    target.initStat();
+                    statC = origin.stat_now;
+                    statT = target.stat_now;
+                    rely_value = b.rely_obj === "self" ? statC[b.rely_name] : statT[b.rely_name];
                     if (b.damage_type == "genesis") {
-                        let damage = b.ratio * rely_value * statC.genesis_increase * crit_part;
-                        break;
+                        damage = b.ratio * rely_value * statC.genesis_increase * crit_part;
                     }
                     else {
-                        let conquer = 1.00; // 克制伤害
-                        if (origin.check_conquer(target)) conquer = 1.30;
+
                         let power = 1.00; // 威力
                         if (spell) power = (1 + statC[<keyof Stat>('might_' + spell.energy)]);
                         damage = b.ratio * (statC.attack - statT[<keyof Stat>(b.damage_type + '_def')] * (1 - statC.penetrate)) * (1 + statC.dmg_d_increase - statT.dmg_t_reduce) * power * crit_part * conquer;
                     };
                     target.damage_me(damage);
                     origin.heal_me(damage * statC.leech_rate);
+                    signal2('after_' + b.damage_type + '_damage', origin, target);
                 } else if (b.type === "heal") {
+                    signal2('before_heal', origin, target);
                     let crit_part = 1.0;
                     if (!b.no_crit) {
-                        if (Math.random() < statC.crit_rate)
+                        if (Math.random() < statC.crit_rate) {
                             crit_part = statC.crit_dmg;
+                            signal2('before_crit_heal', origin, target);
+                        }
+
                     }
                     let heal = b.ratio * rely_value * (1 + statC.heal_rate) * (1 + statT.heal_taken_rate) * crit_part;
                     target.heal_me(heal);
+                    signal2('after_heal', origin, target);
                 } else if (b.type == "shield") {
+                    signal2('before_shield', origin, target);
                     let shield = b.ratio * rely_value;
                     target.add_shield(shield);
+                    signal2('after_shield', origin, target);
                 }
                 if (b.buff) {
+                    signal2('before_buff', origin, target);
                     target.add_buff(b.buff);
+                    signal2('after_buff', origin, target);
                 }
                 if (spell && spell.judge_after) { J.Judge.judgeS(spell.judge_after, origin, aim); }
             }
@@ -434,6 +461,8 @@ class Character {
 
     judges: J.Judge[] = new Array();
     ability: Map<string, Arcanal> = new Map();
+    ultimate?: Arcanal = new Arcanal();
+
     /** 角色归属，玩家方为0 */
     side: number = 0;
 
@@ -506,7 +535,11 @@ class Character {
     }
 
     cast(name: string, level: number = 1, aim: Character) {
-        this.ability.get(name)?.cast(level, this, aim);
+        let arcanal = this.ability.get(name);
+        if (arcanal) {
+            if (arcanal.energy === 'ultimate') this.stat.moxie_now -= this.stat.ultimate_cost;
+            arcanal.cast(level, this, aim);
+        }
     }
 
     signal(sign: string, target: Character) {
@@ -601,10 +634,22 @@ class Character {
         if (this.stat.moxie_now > this.stat.moxie_limit) { this.stat.moxie_now = this.stat.moxie_limit; }
         repl(`${this.name}${this.id}激情增加！现在有${this.stat.moxie_now}`);
     }
+
+    check_ultimate(): boolean {
+        for (let [_, buff] of this.buffs) {
+            if (buff.name == 'seal') { // 封印
+                return false;
+            }
+        }
+        if (this.stat.moxie_now > this.stat.ultimate_cost) {
+            return true;
+        }
+        return false;
+    }
 }
 
 class Stage {
-    round = 1;
+    round = 0;
     player_incants: Arcanal[] = [];
     player_cards: Card[] = [];
     card_pool: number[] = [];
@@ -624,7 +669,34 @@ class Stage {
         return array;
     }
 
+    popCard() {
+        for (let char of this.stage[0]) {
+            if (char.check_ultimate()) {
+                return char.ultimate;
+            }
+        }
+        return this.card_pool.pop();
+    }
 
+    scanCard() {
+        for (let i = 0; i < this.player_cards.length; i++) {
+            if (this.player_cards[i].arcanal_index === this.player_cards[i + 1].arcanal_index && this.player_cards[i].level === this.player_cards[i + 1].level && this.player_cards[i].level < 3) {
+                this.player_cards.splice(i + 1, 1);
+                this.player_cards[i].level += 1;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    refreshPool() {
+        for (let i = 0; i < this.player_incants.length; i++) {
+            let card = new Card();
+            for (let j = 0; j < 8; j++) this.card_pool.push(i);
+            this.player_cards.push(card);
+        }
+        Stage.shuffle(this.card_pool);
+    }
 
     refreshCard() {
         let arcanal_indexes: number[] = Array.from(
@@ -653,13 +725,23 @@ class Stage {
                 }
             }
         }
-        for (let i = 0; i < this.player_incants.length; i++) {
-            let card = new Card();
-            for (let j = 0; j < 8; j++) this.card_pool.push(i);
-            this.player_cards.push(card);
-        }
+        this.refreshPool();
         this.refreshCard();
-        Stage.shuffle(this.card_pool);
+
+    }
+
+    beforeRound() {
+        if (this.round === 0) {
+            signalAll('on_entry', this.stage[0]);
+            this.initCards();
+            this.round = 1;
+        }
+        signalAll('before_round', this.stage[0]);
+
+    }
+
+    aRound() {
+        // TODO
     }
 
     static choose(side: number, avoid?: Character): Character {
@@ -698,6 +780,24 @@ function signal(sign: Signal, source: Character, target: Character) {
     source.signal(sign, target);
 }
 
+function signal2(damage_sign: Signal, source: Character, target: Character) {
+    signal(damage_sign + '_dealt', source, target);
+    signal(damage_sign + '_taken', target, source);
+}
+
+/**
+ * 通知列表中的角色。如果target未定义，它们收到的target是自己
+ * @date 2024/2/8 - 13:41:54
+ *
+ * @param {Character} sources 被通知主体列表
+ * @param {Character} target? 目标对象
+ */
+function signalAll(sign: Signal, sources: Character[], target?: Character) {
+    for (let source of sources) {
+        signal(sign, source, target ? target : source);
+    }
+}
+
 
 
 type Signal = string;
@@ -711,9 +811,7 @@ function test() {
     let s1 = new Spell();
     s1.behaviors.push(damage200);
     let a1 = new Arcanal();
-
     let c1 = new Character();
-
 }
 
 (function main() { })();
