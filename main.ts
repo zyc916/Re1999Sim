@@ -2,28 +2,34 @@
 "use strict";
 
 namespace J {
-    export abstract class Judge {
-        trigger: Signal = '';
-        static variables: Record<string, any> = new Map<string, any>();
-        abstract judge_me(arg: any, sub: Character, obj: Character): any;
-
-        constructor() {
-
-        }
-
-        static judgeS(judges: J.Judge[], source: Character, target: Character) {
+    export class J {
+        static variables: Map<string, any> = new Map<string, any>();
+        static judgeS(judges: Readonly<J.Judge>[], source: Character, target: Character) {
             for (let judge of judges) {
                 judge.judge_me(undefined, source, target);
             }
         }
     }
-    export class FMath extends Judge {
+    export interface Judge {
+        sign: Signal;
+        judge_me(arg: any, sub: Character, obj: Character): any;
+    }
+    export class FMath implements Judge {
+        sign: Signal = '';
         operator: string = "+";
         a: number = 0;
         b: number | Judge = 0;
+
+        constructor({ sign = '', operator, a = 0, b }: { sign?: Signal, operator: string, a?: number, b: number | Judge; }) {
+            this.sign = sign;
+            this.operator = operator;
+            this.a = a;
+            this.b = b;
+        }
+
         judge_me(arg: any, sub: Character, obj: Character) {
             let a = arg ? arg : this.a;
-            let b = this.b instanceof Judge ? this.b.judge_me(undefined, sub, obj) : this.b;
+            let b = typeof this.b === 'number' ? this.b : this.b.judge_me(undefined, sub, obj);
             switch (this.operator) {
                 case "+":
                     return a + b;
@@ -42,12 +48,21 @@ namespace J {
             }
         }
     }
-    export class FFunc extends Judge {
+    export class FFunc implements Judge {
+
+        sign: Signal = '';
         func: keyof Math = "floor";
         b: number | Judge = 0;
+
+        constructor({ sign = '', func, b = 0 }: { sign?: Signal, func: keyof Math, b?: number | Judge; }) {
+            this.sign = sign;
+            this.func = func;
+            this.b = b;
+        }
+
         judge_me(arg: any, sub: Character, obj: Character) {
             let b = arg ? arg : this.b;
-            b = b instanceof Judge ? <number>b.judge_me(undefined, sub, obj) : b;
+            b = typeof b === 'number' ? b : <number>b.judge_me(undefined, sub, obj);
             if (typeof Math[this.func] === "function") {
                 return (<Function>Math[this.func])(b);
             } else {
@@ -55,23 +70,45 @@ namespace J {
             }
         }
     }
-    export class FGet extends Judge {
+    export class FGet implements Judge {
+        sign: string = '';
         variable: string = "";
+
+        constructor({ sign = '', variable }: { sign?: Signal; variable: string; }) {
+            this.sign = sign;
+            this.variable = variable;
+        }
+
         judge_me(arg: any, sub: Character, obj: Character) {
-            return Judge.variables.get(this.variable);
+            return J.variables.get(this.variable);
         }
     }
-    export class FSet extends Judge {
+    export class FSet implements Judge {
+        sign: string = '';
         variable: string = "";
+
+        constructor({ sign = '', variable }: { sign?: Signal; variable: string; }) {
+            this.sign = sign;
+            this.variable = variable;
+        }
+
         judge_me(arg: any, sub: Character, obj: Character) {
-            Judge.variables.set(this.variable, arg);
+            J.variables.set(this.variable, arg);
         }
     }
-    export class FAccess extends Judge {
+    export class FAccess implements Judge {
+        sign: string = '';
         path: string = "";
-        aim: "sub" | "obj" = "obj";
+        rely_r: "sub" | "obj" = "obj";
+
+        constructor({ sign = '', path, rely_r }: { sign?: Signal; path: string; rely_r: 'sub' | 'obj'; }) {
+            this.sign = sign;
+            this.path = path;
+            this.rely_r = rely_r;
+        }
+
         judge_me(arg: undefined | any, sub: Character, obj: Character) {
-            let rely = this.aim === "obj" ? obj : sub;
+            let rely = this.rely_r === "obj" ? obj : sub;
             const parts = this.path.split(".");
             for (let i = 0; i < parts.length; i++) {
                 // @ts-ignore
@@ -81,17 +118,41 @@ namespace J {
             return rely;
         }
     }
-    export class FQuery extends Judge {
+    export class FQuery implements Judge {
+        sign: string = '';
         keyword: string = "";
-        aim: "sub" | "obj" = "obj";
+        aim: Selector = "<self>";
+
+        constructor({ sign = '', keyword, aim }: { sign: Signal; keyword: string; aim: Selector; }) {
+            this.sign = sign;
+            this.keyword = keyword;
+            this.aim = aim;
+        }
+
         judge_me(arg: any, sub: Character, obj: Character) {
-            let rely = this.aim === "obj" ? obj : sub;
+            let count = 0;
+            let chars = Stage.select(this.aim, sub, obj);
+            for (const char of chars) {
+                for (const buff of Object.values(char.buffs)) {
+                    if (buff.buff_cat === this.keyword || buff.name === this.keyword) {
+                        count++;
+                    }
+                }
+            }
+            return count;
         }
     }
-    export class FRandom extends Judge {
-        static readonly type: 'random' = "random";
+
+    export class FRandom implements Judge {
+        sign: string = '';
         private probability: number[] = new Array();
         private value: number[] = new Array();
+
+        constructor({ sign, probability, value }: { sign: string; probability: number[]; value: number[]; }) {
+            this.sign = sign;
+            this.probability = probability;
+            this.value = value;
+        }
 
         judge_me(a: any, sub: Character, target: Character): number {
             if (this.probability.length !== this.value.length) throw new Error('概率和值数组的长度必须相同');
@@ -115,10 +176,16 @@ namespace J {
             throw new EvalError('FRandom出错了');
         }
     }
-    export class JProbable extends Judge {
-        static readonly type: 'behave' = "behave";
+    export class JProbable implements Judge {
+        sign: string;
         private probability: number[] = new Array();
         private exec: Judge[] = new Array();
+
+        constructor({ sign, probability, exec }: { sign: string; probability: number[]; exec: Judge[]; }) {
+            this.sign = sign;
+            this.probability = probability;
+            this.exec = exec;
+        }
 
         judge_me(arg0: any, sub: Character, obj: Character): any {
             if (this.probability.length !== this.exec.length) throw new Error('概率和值数组的长度必须相同');
@@ -142,17 +209,25 @@ namespace J {
             throw new EvalError('JProbable出错了');
         }
     }
-    export class JWith extends Judge {
-        static readonly type: string = 'with';
-        target: Selector = '<us>';
+    export class JWith implements Judge {
+        sign: string;
+        aim: Selector = '<us>';
         keyword: string = '';
         op: string = '>=';
         b: number = 1;
-        exec: Executable = new JBehave();
+        exec: Executable;
+
+        constructor({ sign, aim, keyword, op, b, exec }: { sign: string; aim: Selector; keyword: string; op: string; b: number; exec: Executable; }) {
+            this.sign = sign;
+            this.aim = aim;
+            this.keyword = keyword;
+            this.b = b;
+            this.exec = exec;
+        }
 
         judge_me(arg: any, sub: Character, obj: Character): void {
             let count = 0;
-            let chars = Stage.select(this.target, sub, obj);
+            let chars = Stage.select(this.aim, sub, obj);
             for (const char of chars) {
                 for (const buff of Object.values(char.buffs)) {
                     if (buff.buff_cat === this.keyword || buff.name === this.keyword) {
@@ -176,19 +251,27 @@ namespace J {
         }
     }
 
-    export class JCompare extends Judge {
-        static readonly type: string = 'compare';
+    export class JCompare implements Judge {
+        sign: string;
         private a?: number;
         private b: number | Evaluate = 0;
         private op: string = '>';
-        private exec: Executable = new JBehave();
+        private exec: Executable = new JBehave({ sign: '', behaves: [] });
+
+        constructor({ sign, a = 0, b, op, exec }: { sign: string; a?: number; b: number | Evaluate; op: string; exec: Executable; }) {
+            this.sign = sign;
+            this.a = a;
+            this.b = b;
+            this.op = op;
+            this.exec = exec;
+        }
 
         judge_me(v: number, sub: Character, obj: Character): void {
             if (this.a === undefined && v === undefined) {
                 throw new EvalError('JCompare when <a> was undefined'); // a v至少存在一个
             }
             const a = this.a !== undefined ? this.a : v!; // 使用非空断言操作符，因为我们已经检查了v
-            const b = this.b instanceof Judge ? this.b.judge_me(undefined, sub, obj) : this.b;
+            const b = typeof this.b === 'number' ? this.b : this.b.judge_me(undefined, sub, obj);
             let flag = false;
             switch (this.op) {
                 case '>=': flag = a >= b; break;
@@ -203,15 +286,30 @@ namespace J {
         }
     }
 
-    export class JBehave extends Judge {
-        static readonly type: 'behave' = "behave"; behaves: Behavior[] = [];
+    export class JBehave implements Judge {
+        sign: string;
+        behaves: Behavior[] = [];
+
+        constructor({ sign, behaves }: { sign: string; behaves: Behavior[]; }) {
+            this.sign = sign;
+            this.behaves = behaves;
+        }
+
         judge_me(arg0: any, sub: Character, obj: Character) {
             if (sub) { Behavior.behave(this.behaves, sub, obj); }
             else { Behavior.behave(this.behaves, sub, obj); }
         }
     }
-    export class JSeries extends Judge {
-        static readonly type: 'series' = "series"; judges: Judge[] = [];
+
+    export class JSeries implements Judge {
+        sign: string;
+        judges: Judge[] = [];
+
+        constructor({ sign, judge }: { sign: string; judge: Judge[]; }) {
+            this.sign = sign;
+            this.judges = judge;
+        }
+
         judge_me(arg0: any, sub: Character, obj: Character) {
             for (let judge of this.judges) {
                 let rv = judge.judge_me(arg0, sub, obj);
@@ -225,20 +323,142 @@ namespace J {
     type Executable = JBehave | JSeries | JCompare | JProbable | JWith;
 }
 
-interface Display { id: number; toText(): string; }
+interface Display { toString(): string; }
+
+class List<T extends Display> {
+    label: string;
+    items: T[];
+    editor: Editor<T>;
+    add_input: HTMLInputElement;
+
+    ul: HTMLUListElement;
+    li_val: number = 0;
+    cursor: number = -1;
+
+    constructor(label = 'list', items: T[] = new Array<T>(), editor: Editor<T>) {
+        this.ul = document.createElement('ul');
+        this.add_input = document.createElement('input');
+        this.add_input.type = 'text';
+        this.add_input.placeholder = 'Add something';
+        this.editor = editor;
+        this.label = label;
+        this.items = items;
+    }
+
+    easyAdd() {
+
+    }
+
+    appendTag(parent: HTMLElement, addType: 'select' | 'create' | 'ask' = 'select') {
+        let div = document.createElement('div');
+
+        let p = document.createElement('p');
+        p.textContent = this.label;
+        div.appendChild(p);
+        for (let item of this.items) {
+            this.add(item);
+        }
+        div.appendChild(this.ul);
+        let create_button = document.createElement('button');
+        create_button.textContent = '+';
+        switch (addType) {
+            case 'ask': create_button.onclick = this.easyAdd; div.appendChild(this.add_input); break;
+
+        }
+        div.appendChild(create_button);
+        parent.appendChild(div);
+    }
+
+    add(item: T) {
+        let li = document.createElement('li');
+        li.className = 'list-item-9';
+        li.setAttribute('data-value', this.li_val.toString());
+        li.setAttribute('selected', '0');
+        // @ts-ignore
+        li.addEventListener('onclick', this.itemOnclick);
+        li.textContent = item.toString();
+        this.li_val += 1;
+        this.ul.appendChild(li);
+    }
+
+    indexOf(li_v: HTMLLIElement | string) {
+        let lis = this.ul.getElementsByTagName('li');
+        let value = typeof li_v == 'string' ? li_v : li_v.getAttribute('data-value');
+        for (let i = 0; i < lis.length; i++) {
+            if (lis[i].getAttribute('data-value') == value) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    itemOnclick(e: MouseEvent) {
+        let li = <HTMLLIElement>e.target;
+        let value = li.getAttribute('data-value')!;
+        let index = this.indexOf(value);
+        let lis = this.ul.getElementsByTagName('li');
+        if (e.shiftKey) {
+            if (!e.ctrlKey) { for (let i = 0; i < lis.length; i++)lis[i].setAttribute('selected', '0'); }
+
+            let [min, max] = index < this.cursor ? [index, this.cursor] : [this.cursor, index];
+            for (let i = min; i < max; i++) {
+                lis[i].setAttribute('selected', '1');
+            }
+        } else if (e.ctrlKey) {
+            this.cursor = this.indexOf(li);
+            li.setAttribute('selected', (1 - Number(lis[index].getAttribute('selected'))).toString());
+        }
+    }
+
+    delete() {
+        let lis = this.ul.getElementsByTagName('li');
+        for (let i = lis.length; i > 0; i--) {
+            if (lis[i].getAttribute('selected') === '1') this.ul.removeChild(lis[i]);
+        }
+    }
+}
+
+
+class Parameter<T extends Display> {
+    label: string;
+    attr_name: string;
+    type: string; // list, choice, string, number, object
+    child_type?: (typeof Object) & { editor: Editor<T>; }; // use when type is list
+
+    constructor(label: string, attr_name: string, type: string, child_type?: typeof Object) {
+        this.label = label;
+        this.attr_name = attr_name;
+        this.type = type;
+        // @ts-ignore // FIXME
+        this.child_type = child_type;
+    }
+
+    appendTag(parent: HTMLElement) {
+        if (this.type === 'list') {
+            var list: List<T> = new List<T>(this.label, [], this.child_type!.editor);
+        }
+
+    }
+}
+
 class Editor<T extends Display> {
     cls: T & { instances: T[]; };
     name: string = '对象';
     init_from?: Editor<any>;
     table: Record<string, any> = {};
 
+    id: number;
+    static count: number = 0;
+
     constructor(cls: T & { instances: T[]; }, table: Record<string, any>, init_from?: Editor<any>) {
+        Editor.count += 1;
+        this.id = Editor.count;
         this.cls = cls;
         this.table = table;
         this.init_from = init_from;
     }
 
-    popup_select() {
+    /* popup_select() {
         let mask = document.getElementById('menu-mask-9');
         if (!mask) { throw new Error('can not find menu mask'); }
         let container = document.createElement('div');
@@ -260,7 +480,7 @@ class Editor<T extends Display> {
         form.appendChild(div1);
         container.appendChild(form);
         mask.appendChild(container);
-    }
+    } */
 
     on_submit() {
 
@@ -324,14 +544,14 @@ class Buff {
     merge: 'add' | 'individually' | 'no' = 'no';
 
     stat_inc: StatInc = {};
-    judge: J.Judge[] = new Array<J.Judge>();
-    decrease: J.Judge[] = new Array<J.Judge>();
+    judge: Readonly<J.Judge>[] = new Array<J.Judge>();
+    decrease: Readonly<J.Judge>[] = new Array<J.Judge>();
     host_character: Character = stage.Background;
 
     signal(sign: string, source: Character, target: Character) {
         console.log(sign);
         for (let judge of this.judge) {
-            if (judge.trigger === sign) {
+            if (judge.sign === sign) {
                 judge.judge_me(undefined, source, target);
             }
         }
@@ -339,7 +559,7 @@ class Buff {
 }
 class Item {
     stat_inc: StatInc = {};
-    attach: J.Judge[] = new Array<J.Judge>();
+    attach: Readonly<J.Judge>[] = new Array<J.Judge>();
 }
 
 class Behavior {
@@ -357,7 +577,7 @@ class Behavior {
                 let statC = origin.stat;
                 let statT = target.stat;
                 let rely_value = b.rely_obj === "self" ? statC[b.rely_name] : statT[b.rely_name];
-                if (spell && spell.judge_before) { J.Judge.judgeS(spell.judge_before, origin, aim); }
+                if (spell && spell.judge_before) { J.J.judgeS(spell.judge_before, origin, aim); }
                 if (b.type == "damage") {
                     signal2('before_damage', origin, target);
                     let damage = 0;
@@ -415,7 +635,7 @@ class Behavior {
                     target.add_buff(b.buff);
                     signal2('after_buff', origin, target);
                 }
-                if (spell && spell.judge_after) { J.Judge.judgeS(spell.judge_after, origin, aim); }
+                if (spell && spell.judge_after) { J.J.judgeS(spell.judge_after, origin, aim); }
             }
         }
     }
@@ -425,8 +645,8 @@ class Behavior {
 class Spell {
     energy: "incant" | "ultimate" = "incant";
     category: "buff" | "debuff" | "attack" | "heal" | "shield" | "versatile" = 'attack';
-    judge_before: J.Judge[] = [];
-    judge_after: J.Judge[] = [];
+    judge_before: Readonly<J.Judge>[] = [];
+    judge_after: Readonly<J.Judge>[] = [];
     behaviors: Behavior[] = new Array<Behavior>();
     cast(origin: Character, aim: Character) {
         signal('on_' + this.energy, origin, aim);
@@ -475,7 +695,7 @@ class Character {
     items: Item[] = [];
     buffs: Map<number, Buff> = new Map<number, Buff>();
 
-    judges: J.Judge[] = new Array();
+    judges: Readonly<J.Judge>[] = new Array();
     ability: Map<string, Arcanal> = new Map();
     ultimate?: Arcanal = new Arcanal();
 
@@ -561,7 +781,7 @@ class Character {
     signal(sign: string, target: Character) {
         console.log(sign);
         for (let judge of this.judges) {
-            if (judge.trigger === sign) {
+            if (judge.sign === sign) {
                 judge.judge_me(undefined, this, target);
             }
         }
