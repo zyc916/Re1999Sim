@@ -372,7 +372,7 @@ namespace J {
         }
 
         judge_me(arg0: any, sub: Character, obj: Character) {
-            Behavior.behave(this.behave, sub, obj, arg0);
+            Behavior.behave(this.behave, sub, obj, undefined, arg0);
         }
     }
     /**
@@ -400,7 +400,7 @@ namespace J {
 
     type Evaluate = FRandom | FMath | FFunc | FQuery | FGet;
     type Executable = JBehave | JSeries | JCompare | JProbable | JWith;
-} 
+}
 
 
 class Stat {
@@ -491,6 +491,7 @@ class Behavior {
     no_crit: boolean = false;
     buff?: Buff;
     static behave(behave: Behavior, origin: Character, aim: Character, spell?: Spell, ratio?: number) {
+        repl(ratio)
         let real_ratio = ratio !== undefined ? ratio : behave.ratio;
         for (let target of Stage.select(behave.selector, origin, aim)) {
             let statC = origin.stat;
@@ -525,7 +526,7 @@ class Behavior {
                 }
                 else {
                     let power = 1.00; // 威力
-                    if (spell) power = (1 + statC[<keyof Stat>('might_' + spell.energy)]);
+                    if (spell !== undefined) power = (1 + statC[<keyof Stat>('might_' + spell.energy)]);
                     damage = real_ratio * (statC.attack - statT[<keyof Stat>(behave.damage_type + '_def')] * (1 - statC.penetrate)) * (1 + statC.dmg_d_increase - statT.dmg_t_reduce) * power * crit_part * conquer;
                 };
                 target.damage_me(damage);
@@ -574,7 +575,7 @@ class Spell {
     behaviors: Behavior[] = new Array<Behavior>();
     cast(origin: Character, aim: Character) {
         signal('on_' + this.energy, origin, aim);
-        Behavior.behaveS(this.behaviors, origin, aim);
+        Behavior.behaveS(this.behaviors, origin, aim, this);
     }
 }
 
@@ -686,10 +687,7 @@ class Character {
             enemy.afflatus in Character.afflatus4
         ) {
             if (
-                (Character.afflatus4.indexOf(this.afflatus) -
-                    Character.afflatus4.indexOf(enemy.afflatus)) %
-                4 ==
-                -1
+                (Character.afflatus4.indexOf(this.afflatus) - Character.afflatus4.indexOf(enemy.afflatus)) % 4 == -1
             ) {
                 return true;
             }
@@ -994,10 +992,19 @@ function test() {
     damage160.type = 'damage';
     damage160.damage_type = 'real';
 
+    let damager = new Behavior();
+    damager.type = 'damage';
+    damager.selector = '<aim>';
+    damager.damage_type = 'real';
     let ran = new J.FRandom({ sign: '', probability: [0.2, 0.4, 0.4], value: [1, 2, 3] });
+    let mul_09 = new J.FMath({ sign: '', b: 0.9, operator: '*' });
+    let jdr = new J.JBehave({ sign: '', behave: damager });
+    let s9 = new J.JSeries({ sign: '', judge: [ran, mul_09, jdr] });
 
     let s1 = new Spell();
+    s1.energy = 'incant';
     s1.behaviors.push(damage160);
+    s1.judge_after = [s9];
     let a1 = new Arcanal();
     a1.spells.push(s1);
 
