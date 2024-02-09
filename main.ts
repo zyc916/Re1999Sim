@@ -1,19 +1,50 @@
 // @ts-check
 "use strict";
 
+/**
+ * J空间：存放了所有判定类型。
+ */
 namespace J {
+    /**
+     * J公用类，提供一些公用属性和帮助函数
+     */
     export class J {
+        /** 公用变量表 */
         static variables: Map<string, any> = new Map<string, any>();
+        /**
+         * 快速判定函数，能够一次性判定多个判定器
+         * @param {Readonly<J.Judge>[]} judges 判定器 数组
+         * @param {Character} source 判定来源
+         * @param {Character} target 判定目标
+         */
         static judgeS(judges: Readonly<J.Judge>[], source: Character, target: Character) {
             for (let judge of judges) {
                 judge.judge_me(undefined, source, target);
             }
         }
     }
+
+    /**
+     * 判定器基础接口 Judge
+     */
     export interface Judge {
+        /** 触发器 */
         sign: Signal;
+
+        /**
+         * 自我判定
+         * @param {*} arg 判定器参数，来源于上一判定器
+         * @param {Character} sub 判定来源
+         * @param {Character} obj 判定目标
+         * @returns {*}
+         */
         judge_me(arg: any, sub: Character, obj: Character): any;
     }
+    /**
+     * 判定器：计算
+     * 用于进行二元四则运算
+     * 返回结果
+     */
     export class FMath implements Judge {
         sign: Signal = '';
         operator: string = "+";
@@ -48,6 +79,12 @@ namespace J {
             }
         }
     }
+
+    /**
+     * 判定器：数学函数
+     * 用于执行Math空间下的方法
+     * 返回结果
+     */
     export class FFunc implements Judge {
 
         sign: Signal = '';
@@ -70,6 +107,10 @@ namespace J {
             }
         }
     }
+    /**
+     * 判定器：变量读取
+     * 返回读取的变量
+     */
     export class FGet implements Judge {
         sign: string = '';
         variable: string = "";
@@ -83,6 +124,9 @@ namespace J {
             return J.variables.get(this.variable);
         }
     }
+    /**
+     * 判定器：变量修改/定义
+     */
     export class FSet implements Judge {
         sign: string = '';
         variable: string = "";
@@ -96,6 +140,10 @@ namespace J {
             J.variables.set(this.variable, arg);
         }
     }
+    /**
+     * 判定器：读取属性（键可能不存在，建议谨慎使用，或使用Behavior.rely替代）
+     * 返回读取的属性
+     */
     export class FAccess implements Judge {
         sign: string = '';
         path: string = "";
@@ -118,6 +166,10 @@ namespace J {
             return rely;
         }
     }
+    /**
+     * 判定器：查找buff
+     * 返回查找值
+     */
     export class FQuery implements Judge {
         sign: string = '';
         keyword: string = "";
@@ -133,8 +185,8 @@ namespace J {
             let count = 0;
             let chars = Stage.select(this.aim, sub, obj);
             for (const char of chars) {
-                for (const buff of Object.values(char.buffs)) {
-                    if (buff.buff_cat === this.keyword || buff.name === this.keyword) {
+                for (const buff of char.buffs.values()) {
+                    if (buff.buff_cat === this.keyword || buff.name.includes(this.keyword)) {
                         count++;
                     }
                 }
@@ -142,7 +194,9 @@ namespace J {
             return count;
         }
     }
-
+    /** 
+     * 判定器：概率返回随机值
+     */
     export class FRandom implements Judge {
         sign: string = '';
         private probability: number[] = new Array();
@@ -176,6 +230,11 @@ namespace J {
             throw new EvalError('FRandom出错了');
         }
     }
+    /**
+     * 执行器：概率执行判定
+     * 级联传入
+     * 返回执行判定器的结果
+     */
     export class JProbable implements Judge {
         sign: string;
         private probability: number[] = new Array();
@@ -209,6 +268,13 @@ namespace J {
             throw new EvalError('JProbable出错了');
         }
     }
+    /**
+     * 执行器：拥有特定buff一定数值则执行
+     * （相当于FQuery和JCompare的结合）
+     * 传入的是buff的总值
+     * 执行成功：返回执行器的结果
+     * 执行失败，返回 -1
+     */
     export class JWith implements Judge {
         sign: string;
         aim: Selector = '<us>';
@@ -225,7 +291,7 @@ namespace J {
             this.exec = exec;
         }
 
-        judge_me(arg: any, sub: Character, obj: Character): void {
+        judge_me(arg: any, sub: Character, obj: Character): any {
             let count = 0;
             let chars = Stage.select(this.aim, sub, obj);
             for (const char of chars) {
@@ -246,17 +312,23 @@ namespace J {
                 default: throw new EvalError('无效运算符');
             }
             if (flag) {
-                this.exec.judge_me(count, sub, obj);
+                return this.exec.judge_me(count, sub, obj);
+            } else {
+                return -1;
             }
         }
     }
-
+    /**
+     * 执行器：比较arg0和b，符合比较运算符则执行
+     * 执行成功：返回执行的结果
+     * 执行失败：返回-1
+     */
     export class JCompare implements Judge {
         sign: string;
         private a?: number;
         private b: number | Evaluate = 0;
         private op: string = '>';
-        private exec: Executable = new JBehave({ sign: '', behaves: [] });
+        private exec: Executable;
 
         constructor({ sign, a = 0, b, op, exec }: { sign: string; a?: number; b: number | Evaluate; op: string; exec: Executable; }) {
             this.sign = sign;
@@ -266,7 +338,7 @@ namespace J {
             this.exec = exec;
         }
 
-        judge_me(v: number, sub: Character, obj: Character): void {
+        judge_me(v: number, sub: Character, obj: Character): any {
             if (this.a === undefined && v === undefined) {
                 throw new EvalError('JCompare when <a> was undefined'); // a v至少存在一个
             }
@@ -282,25 +354,32 @@ namespace J {
                 case '!=': flag = a != b; break;
                 default: throw new EvalError('无效运算符');
             }
-            if (flag) { this.exec.judge_me(<any>undefined, sub, obj); }
+            if (flag) { return this.exec.judge_me(<any>undefined, sub, obj); }
+            else { return -1; }
         }
     }
-
+    /**
+     * 执行器：直接执行单条behavior
+     * 如果有arg0，则覆盖behavior的倍率
+     */
     export class JBehave implements Judge {
         sign: string;
-        behaves: Behavior[] = [];
+        behave: Behavior;
 
-        constructor({ sign, behaves }: { sign: string; behaves: Behavior[]; }) {
+        constructor({ sign, behave }: { sign: string; behave: Behavior; }) {
             this.sign = sign;
-            this.behaves = behaves;
+            this.behave = behave;
         }
 
         judge_me(arg0: any, sub: Character, obj: Character) {
-            if (sub) { Behavior.behave(this.behaves, sub, obj); }
-            else { Behavior.behave(this.behaves, sub, obj); }
+            Behavior.behave(this.behave, sub, obj, arg0);
         }
     }
-
+    /**
+     * 执行器：串联
+     * 上一个判定器的返回值不为空则将传给下一个
+     * 返回值为判定器组的最后一个有效返回值
+     */
     export class JSeries implements Judge {
         sign: string;
         judges: Judge[] = [];
@@ -321,171 +400,9 @@ namespace J {
 
     type Evaluate = FRandom | FMath | FFunc | FQuery | FGet;
     type Executable = JBehave | JSeries | JCompare | JProbable | JWith;
-}
-
-interface Display { toString(): string; }
-
-class List<T extends Display> {
-    label: string;
-    items: T[];
-    editor: Editor<T>;
-    add_input: HTMLInputElement;
-
-    ul: HTMLUListElement;
-    li_val: number = 0;
-    cursor: number = -1;
-
-    constructor(label = 'list', items: T[] = new Array<T>(), editor: Editor<T>) {
-        this.ul = document.createElement('ul');
-        this.add_input = document.createElement('input');
-        this.add_input.type = 'text';
-        this.add_input.placeholder = 'Add something';
-        this.editor = editor;
-        this.label = label;
-        this.items = items;
-    }
-
-    easyAdd() {
-
-    }
-
-    appendTag(parent: HTMLElement, addType: 'select' | 'create' | 'ask' = 'select') {
-        let div = document.createElement('div');
-
-        let p = document.createElement('p');
-        p.textContent = this.label;
-        div.appendChild(p);
-        for (let item of this.items) {
-            this.add(item);
-        }
-        div.appendChild(this.ul);
-        let create_button = document.createElement('button');
-        create_button.textContent = '+';
-        switch (addType) {
-            case 'ask': create_button.onclick = this.easyAdd; div.appendChild(this.add_input); break;
-
-        }
-        div.appendChild(create_button);
-        parent.appendChild(div);
-    }
-
-    add(item: T) {
-        let li = document.createElement('li');
-        li.className = 'list-item-9';
-        li.setAttribute('data-value', this.li_val.toString());
-        li.setAttribute('selected', '0');
-        // @ts-ignore
-        li.addEventListener('onclick', this.itemOnclick);
-        li.textContent = item.toString();
-        this.li_val += 1;
-        this.ul.appendChild(li);
-    }
-
-    indexOf(li_v: HTMLLIElement | string) {
-        let lis = this.ul.getElementsByTagName('li');
-        let value = typeof li_v == 'string' ? li_v : li_v.getAttribute('data-value');
-        for (let i = 0; i < lis.length; i++) {
-            if (lis[i].getAttribute('data-value') == value) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    itemOnclick(e: MouseEvent) {
-        let li = <HTMLLIElement>e.target;
-        let value = li.getAttribute('data-value')!;
-        let index = this.indexOf(value);
-        let lis = this.ul.getElementsByTagName('li');
-        if (e.shiftKey) {
-            if (!e.ctrlKey) { for (let i = 0; i < lis.length; i++)lis[i].setAttribute('selected', '0'); }
-
-            let [min, max] = index < this.cursor ? [index, this.cursor] : [this.cursor, index];
-            for (let i = min; i < max; i++) {
-                lis[i].setAttribute('selected', '1');
-            }
-        } else if (e.ctrlKey) {
-            this.cursor = this.indexOf(li);
-            li.setAttribute('selected', (1 - Number(lis[index].getAttribute('selected'))).toString());
-        }
-    }
-
-    delete() {
-        let lis = this.ul.getElementsByTagName('li');
-        for (let i = lis.length; i > 0; i--) {
-            if (lis[i].getAttribute('selected') === '1') this.ul.removeChild(lis[i]);
-        }
-    }
-}
+} 
 
 
-class Parameter<T extends Display> {
-    label: string;
-    attr_name: string;
-    type: string; // list, choice, string, number, object
-    child_type?: (typeof Object) & { editor: Editor<T>; }; // use when type is list
-
-    constructor(label: string, attr_name: string, type: string, child_type?: typeof Object) {
-        this.label = label;
-        this.attr_name = attr_name;
-        this.type = type;
-        // @ts-ignore // FIXME
-        this.child_type = child_type;
-    }
-
-    appendTag(parent: HTMLElement) {
-        if (this.type === 'list') {
-            var list: List<T> = new List<T>(this.label, [], this.child_type!.editor);
-        }
-
-    }
-}
-
-class Editor<T extends Display> {
-    cls: T & { instances: T[]; };
-    name: string = '对象';
-    init_from?: Editor<any>;
-    table: Record<string, any> = {};
-
-    id: number;
-    static count: number = 0;
-
-    constructor(cls: T & { instances: T[]; }, table: Record<string, any>, init_from?: Editor<any>) {
-        Editor.count += 1;
-        this.id = Editor.count;
-        this.cls = cls;
-        this.table = table;
-        this.init_from = init_from;
-    }
-
-    /* popup_select() {
-        let mask = document.getElementById('menu-mask-9');
-        if (!mask) { throw new Error('can not find menu mask'); }
-        let container = document.createElement('div');
-        container.className = 'editor-container-9';
-        let form = document.createElement('form');
-        let div1 = document.createElement('div');
-        let label = document.createElement('p');
-        label.innerText = '选择一个' + this.name;
-        let list = document.createElement('select');
-        list.id = 'instance_id';
-        for (let instance of this.cls.instances) {
-            let option = document.createElement('option');
-            option.value = instance.id.toString();
-            option.innerText = instance.toText();
-            list.appendChild(option);
-        }
-        div1.appendChild(label);
-        div1.appendChild(list);
-        form.appendChild(div1);
-        container.appendChild(form);
-        mask.appendChild(container);
-    } */
-
-    on_submit() {
-
-    }
-}
 class Stat {
     static instances: Stat[] = [];
     attack: number = 100;
@@ -537,6 +454,8 @@ class Buff {
     static count = 0;
     id: number = 1;
     name: string = '';
+    buff_cat: 'pos_status' | 'neg_status' | 'stats_up' | 'stats_down' | 'counter' | 'shield' | 'special' = 'special';
+
     value: number = 1;
     limit: number = Infinity;
 
@@ -549,9 +468,9 @@ class Buff {
     host_character: Character = stage.Background;
 
     signal(sign: string, source: Character, target: Character) {
-        console.log(sign);
         for (let judge of this.judge) {
             if (judge.sign === sign) {
+                console.log(sign, '由buff触发器触发');
                 judge.judge_me(undefined, source, target);
             }
         }
@@ -568,79 +487,84 @@ class Behavior {
     damage_type?: "real" | "mental" | "genesis";
     rely_obj: "self" | "aim" = "self";
     rely_name: keyof Stat = "attack";
-    ratio: number = 2.0;
+    ratio: number = 2.00;
     no_crit: boolean = false;
     buff?: Buff;
-    static behave(behaves: Behavior[], origin: Character, aim: Character, spell?: Spell) {
-        for (let b of behaves) {
-            for (let target of Stage.select(b.selector, origin, aim)) {
-                let statC = origin.stat;
-                let statT = target.stat;
-                let rely_value = b.rely_obj === "self" ? statC[b.rely_name] : statT[b.rely_name];
-                if (spell && spell.judge_before) { J.J.judgeS(spell.judge_before, origin, aim); }
-                if (b.type == "damage") {
-                    signal2('before_damage', origin, target);
-                    let damage = 0;
-                    let crit_part = 1.0;
-                    let conquer = 1.00; // 克制伤害
-                    if (origin.check_conquer(target)) {
-                        conquer = 1.30;
-                        signal2('before_conquer_damage', origin, target);
-                    }
-                    if (!b.no_crit) {
-                        if (Math.random() < (statC.crit_rate - statT.crit_anti_rate)) {
-                            signal2('before_crit_damage', origin, target);
-                            signal2('before_' + b.damage_type + '_crit_damage', origin, target);
-                            crit_part = statC.crit_dmg - statT.crit_def;
-                        }
-                    }
-                    signal2('before_' + b.damage_type + '_damage', origin, target);
-                    origin.initStat();
-                    target.initStat();
-                    statC = origin.stat_now;
-                    statT = target.stat_now;
-                    rely_value = b.rely_obj === "self" ? statC[b.rely_name] : statT[b.rely_name];
-                    if (b.damage_type == "genesis") {
-                        damage = b.ratio * rely_value * statC.genesis_increase * crit_part;
-                    }
-                    else {
-                        let power = 1.00; // 威力
-                        if (spell) power = (1 + statC[<keyof Stat>('might_' + spell.energy)]);
-                        damage = b.ratio * (statC.attack - statT[<keyof Stat>(b.damage_type + '_def')] * (1 - statC.penetrate)) * (1 + statC.dmg_d_increase - statT.dmg_t_reduce) * power * crit_part * conquer;
-                    };
-                    target.damage_me(damage);
-                    origin.heal_me(damage * statC.leech_rate);
-                    signal2('after_' + b.damage_type + '_damage', origin, target);
-                } else if (b.type === "heal") {
-                    signal2('before_heal', origin, target);
-                    let crit_part = 1.0;
-                    if (!b.no_crit) {
-                        if (Math.random() < statC.crit_rate) {
-                            crit_part = statC.crit_dmg;
-                            signal2('before_crit_heal', origin, target);
-                        }
+    static behave(behave: Behavior, origin: Character, aim: Character, spell?: Spell, ratio?: number) {
+        let real_ratio = ratio !== undefined ? ratio : behave.ratio;
+        for (let target of Stage.select(behave.selector, origin, aim)) {
+            let statC = origin.stat;
+            let statT = target.stat;
+            let rely_value = behave.rely_obj === "self" ? statC[behave.rely_name] : statT[behave.rely_name];
+            if (spell && spell.judge_before) { J.J.judgeS(spell.judge_before, origin, aim); }
+            if (behave.type == "damage") {
+                signal2('before_damage', origin, target);
+                let damage = 0;
+                let crit_part = 1.0;
+                let conquer = 1.00; // 克制伤害
 
+                if (origin.check_conquer(target)) {
+                    conquer = 1.30;
+                    signal2('before_conquer_damage', origin, target);
+                }
+                if (!behave.no_crit) {
+                    if (Math.random() < (statC.crit_rate - statT.crit_anti_rate)) {
+                        signal2('before_crit_damage', origin, target);
+                        signal2('before_' + behave.damage_type + '_crit_damage', origin, target);
+                        crit_part = statC.crit_dmg - statT.crit_def;
                     }
-                    let heal = b.ratio * rely_value * (1 + statC.heal_rate) * (1 + statT.heal_taken_rate) * crit_part;
-                    target.heal_me(heal);
-                    signal2('after_heal', origin, target);
-                } else if (b.type == "shield") {
-                    signal2('before_shield', origin, target);
-                    let shield = b.ratio * rely_value;
-                    target.add_shield(shield);
-                    signal2('after_shield', origin, target);
                 }
-                if (b.buff) {
-                    signal2('before_buff', origin, target);
-                    target.add_buff(b.buff);
-                    signal2('after_buff', origin, target);
+                signal2('before_' + behave.damage_type + '_damage', origin, target);
+                origin.initStat();
+                target.initStat();
+                statC = origin.stat_now;
+                statT = target.stat_now;
+                rely_value = behave.rely_obj === "self" ? statC[behave.rely_name] : statT[behave.rely_name];
+                if (behave.damage_type == "genesis") {
+                    damage = real_ratio * rely_value * statC.genesis_increase * crit_part;
                 }
-                if (spell && spell.judge_after) { J.J.judgeS(spell.judge_after, origin, aim); }
+                else {
+                    let power = 1.00; // 威力
+                    if (spell) power = (1 + statC[<keyof Stat>('might_' + spell.energy)]);
+                    damage = real_ratio * (statC.attack - statT[<keyof Stat>(behave.damage_type + '_def')] * (1 - statC.penetrate)) * (1 + statC.dmg_d_increase - statT.dmg_t_reduce) * power * crit_part * conquer;
+                };
+                target.damage_me(damage);
+                origin.heal_me(damage * statC.leech_rate);
+                signal2('after_' + behave.damage_type + '_damage', origin, target);
+            } else if (behave.type === "heal") {
+                signal2('before_heal', origin, target);
+                let crit_part = 1.0;
+                if (!behave.no_crit) {
+                    if (Math.random() < statC.crit_rate) {
+                        crit_part = statC.crit_dmg;
+                        signal2('before_crit_heal', origin, target);
+                    }
+
+                }
+                let heal = behave.ratio * rely_value * (1 + statC.heal_rate) * (1 + statT.heal_taken_rate) * crit_part;
+                target.heal_me(heal);
+                signal2('after_heal', origin, target);
+            } else if (behave.type == "shield") {
+                signal2('before_shield', origin, target);
+                let shield = real_ratio * rely_value;
+                target.add_shield(shield);
+                signal2('after_shield', origin, target);
             }
+            if (behave.buff) {
+                signal2('before_buff', origin, target);
+                target.add_buff(behave.buff);
+                signal2('after_buff', origin, target);
+            }
+            if (spell && spell.judge_after) { J.J.judgeS(spell.judge_after, origin, aim); }
+        }
+    }
+
+    static behaveS(behaves: Behavior[], origin: Character, aim: Character, spell?: Spell) {
+        for (let b of behaves) {
+            this.behave(b, origin, aim, spell = spell);
         }
     }
 }
-
 
 class Spell {
     energy: "incant" | "ultimate" = "incant";
@@ -650,7 +574,7 @@ class Spell {
     behaviors: Behavior[] = new Array<Behavior>();
     cast(origin: Character, aim: Character) {
         signal('on_' + this.energy, origin, aim);
-        Behavior.behave(this.behaviors, origin, aim);
+        Behavior.behaveS(this.behaviors, origin, aim);
     }
 }
 
@@ -712,6 +636,10 @@ class Character {
         if (hint === "string") {
             return `${this.name} #${this.id}`;
         }
+    }
+
+    toString() {
+        return `${this.name} #${this.id}`;
     }
 
     initStat() {
@@ -779,7 +707,7 @@ class Character {
     }
 
     signal(sign: string, target: Character) {
-        console.log(sign);
+        console.log(sign, target.toString());
         for (let judge of this.judges) {
             if (judge.sign === sign) {
                 judge.judge_me(undefined, this, target);
@@ -800,7 +728,7 @@ class Character {
         } else {
             dmg -= this.stat.shield;
         }
-        repl(this + `受到了${dmg}伤害`);
+        repl(this.toString() + `受到了${dmg}伤害`);
         if (this.stat.health_now < 0) {
             this.stat.health_now = 0;
             signal('on_death', this, this);
@@ -812,7 +740,7 @@ class Character {
         this.stat.health_now += heal;
         if (this.stat.health_now > this.stat.health_limit) { this.stat.health_now = this.stat.health_limit; }
         if (heal > 0) {
-            repl(this + `受到了${heal}治疗`);
+            repl(this.toString() + `受到了${heal}治疗`);
         }
     }
 
@@ -855,7 +783,7 @@ class Character {
             flag = true;
         }
         if (flag) {
-            repl(this + `被成功施加了${new_buff.name}`);
+            repl(this.toString() + `被成功施加了${new_buff.name}`);
         }
         return flag;
     }
@@ -869,7 +797,7 @@ class Character {
         }
         this.stat.moxie_now += moxie;
         if (this.stat.moxie_now > this.stat.moxie_limit) { this.stat.moxie_now = this.stat.moxie_limit; }
-        repl(this + `激情增加！现在有${this.stat.moxie_now}`);
+        repl(this.toString() + `激情增加！现在有${this.stat.moxie_now}`);
     }
 
     check_ultimate(): boolean {
@@ -1021,6 +949,7 @@ function signal(sign: Signal, source: Character, target: Character) {
 }
 
 function signal2(damage_sign: Signal, source: Character, target: Character) {
+
     signal(damage_sign + '_dealt', source, target);
     signal(damage_sign + '_taken', target, source);
 }
@@ -1045,21 +974,47 @@ type Signal = string;
 var stage = new Stage();
 var repl = console.log;
 
+function temporarily() {
+    let b1 = new Buff();
+    b1.stat_inc.dmg_d_increase = 0.15;
+    b1.name = "创伤加成+15%";
+    let i1 = new Behavior();
+    i1.type = 'buff';
+    i1.buff = b1;
+    i1.selector = '<us>';
+    let s2 = new Spell();
+    s2.behaviors.push(i1);
+    let a2 = new Arcanal();
+    a2.spells.push(s2);
+}
+
 function test() {
-    let damage200 = new Behavior();
-    damage200.ratio = 2.00;
-    damage200.type = 'damage';
-    damage200.damage_type = 'real';
+    let damage160 = new Behavior();
+    damage160.ratio = 1.60;
+    damage160.type = 'damage';
+    damage160.damage_type = 'real';
+
+    let ran = new J.FRandom({ sign: '', probability: [0.2, 0.4, 0.4], value: [1, 2, 3] });
+
     let s1 = new Spell();
-    s1.behaviors.push(damage200);
+    s1.behaviors.push(damage160);
     let a1 = new Arcanal();
     a1.spells.push(s1);
+
+
+
     let c1 = new Character();
-    c1.name = "玛丽莲";
+    c1.name = "曲娘";
     c1.stat.attack = 1500;
+
     c1.ability.set("1", a1);
+
     let c2 = new Character();
     c2.name = "重塑之手";
+
+    stage.stage[0].push(c1);
+    stage.stage[1].push(c2);
+
     c1.cast('1', 1, c2);
 }
 
