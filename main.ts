@@ -1,16 +1,279 @@
 // @ts-check
 "use strict";
 
+// interface __D 
+type __Extra = { [key: string]: any; };
+type __Display = { toString(): string; } & __Extra;
+type __Accessible = { value: unknown; } & __Extra;
+type __Con<T = {}> = { new(__0: object): T, table: P<T>[], cls: string; };
+
+class P<T> {
+    label: string = 'Parameter';
+    attr_name: keyof T = 'a' as keyof T;
+    type: string = 'string'; // 'string' | 'number' | 'select' | 'object' | 'list'
+    required?: boolean = false;
+    child_types?: __Con<any>[];
+    selections?: [string, string][] = [['default', '请选择']];
+    default?: unknown;
+    addType?: 'text' | 'number' | 'create' | 'select';
+}
+
+class TypeSelect {
+    types: __Con[];
+    values: string[];
+    select: HTMLSelectElement;
+    editor?: Editor<__Display>;
+    constructor(parent: HTMLElement, types: __Con[],) {
+        this.types = types;
+        this.values = [];
+        let div = document.createElement('div');
+        let label = document.createElement('span');
+        div.appendChild(label);
+        this.select = document.createElement('select');
+        for (let type of types) {
+            let option = document.createElement('option');
+            this.select.value = type.cls;
+            this.select.textContent = type.cls;
+            this.select.appendChild(option);
+        }
+        div.appendChild(this.select);
+        let button = document.createElement('button');
+        button.value = '+';
+        button.onclick = this.call;
+        parent.appendChild(div);
+    }
+    call = () => {
+        let i = this.values.indexOf(this.select.value);
+        if (i !== -1) {
+            // TODO
+            this.editor = new Editor(this.types[i]);
+            this.editor.create();
+        }
+    };
+
+    get value() {
+        return this.editor?.value;
+    }
+}
+
+class List<T extends __Display> {
+    label: string;
+    items: Array<T>;
+    types: __Con[];
+    t4add: __Accessible;
+
+    ul: HTMLUListElement;
+    li_val: number = 0;
+    cursor: number = -1;
+
+    constructor(parent: HTMLElement, label = 'list', items: T[] = new Array<T>(), types: __Con[], addType: 'text' | 'number' | 'create' | 'select' = 'text') {
+        this.ul = document.createElement('ul');
+        this.types = types;
+        this.label = label;
+        this.items = items;
+        let div = document.createElement('div');
+
+        let p = document.createElement('p');
+        p.textContent = this.label;
+        div.appendChild(p);
+        for (let item of items) {
+            this.add(item);
+        }
+        div.appendChild(this.ul);
+        let create_button = document.createElement('button');
+        create_button.textContent = '+';
+        switch (addType) {
+            case 'create': this.t4add = new TypeSelect(div, this.types);
+            case 'select': // create_button.onclick = this.editor.
+            default:
+                let input = document.createElement('input');
+                input.placeholder = '添加……';
+                input.type = addType; create_button.onclick = this.easyAdd;
+                div.appendChild(input);
+                this.t4add = input; break;
+        }
+        div.appendChild(create_button);
+        parent.appendChild(div);
+    }
+
+    easyAdd() {
+        this.add(this.t4add.value as T);
+    }
+
+    add(item: T) {
+        let li = document.createElement('li');
+        li.className = 'list-item-9';
+        li.setAttribute('data-value', this.li_val.toString());
+        li.setAttribute('selected', '0');
+        // @ts-ignore
+        li.addEventListener('onclick', this.itemOnclick);
+        this.items.push(item);
+        li.textContent = item.toString();
+        this.li_val += 1;
+        this.ul.appendChild(li);
+    }
+
+    indexOf(li_v: HTMLLIElement | string) {
+        let lis = this.ul.getElementsByTagName('li');
+        let value = typeof li_v == 'string' ? li_v : li_v.getAttribute('data-value');
+        for (let i = 0; i < lis.length; i++) {
+            if (lis[i].getAttribute('data-value') == value) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    itemOnclick(e: MouseEvent) {
+        let li = <HTMLLIElement>e.target;
+        let value = li.getAttribute('data-value')!;
+        let index = this.indexOf(value);
+        let lis = this.ul.getElementsByTagName('li');
+        if (e.shiftKey) {
+            if (!e.ctrlKey) { for (let i = 0; i < lis.length; i++)lis[i].setAttribute('selected', '0'); }
+
+            let [min, max] = index < this.cursor ? [index, this.cursor] : [this.cursor, index];
+            for (let i = min; i < max; i++) {
+                lis[i].setAttribute('selected', '1');
+            }
+        } else if (e.ctrlKey) {
+            this.cursor = index;
+            li.setAttribute('selected', (1 - Number(lis[index].getAttribute('selected'))).toString());
+        } else {
+            for (let i = 0; i < lis.length; i++) lis[i].setAttribute('selected', '0');
+            this.cursor = index;
+            li.setAttribute('selected', '1');
+        }
+    }
+
+    delete() {
+        let lis = this.ul.getElementsByTagName('li');
+        for (let i = lis.length; i > 0; i--) {
+            if (lis[i].getAttribute('selected') === '1') {
+                this.ul.removeChild(lis[i]);
+                this.items.splice(i, 1);
+            }
+        }
+    }
+
+    choice() {
+        return this.items[this.cursor];
+    }
+
+    get value() {
+        return this.items;
+    }
+}
+
+class Editor<T extends __Display> {
+    cls: __Con<T>;
+    edit_obj: __Display;
+    widgets: [string, { value: unknown; }][] = [];
+    constructor(cls: __Con<T>, edit_obj: __Display = {}) {
+        this.cls = cls;
+        this.edit_obj = edit_obj;
+    }
+
+    addItem(param: P<unknown>, parent: HTMLElement) {
+        if (param.type === 'list') {
+            // 创建一个子列表
+            let list;
+            if (this.edit_obj) {
+                // WARN
+                list = new List(parent, param.label, this.edit_obj[param.attr_name], param.child_types!, param.addType!);
+            }
+            else {
+                list = new List(parent, param.label, [], param.child_types!, param.addType!);
+            }
+            this.widgets.push([param.attr_name, list]);
+        }
+        else if (param.type === 'object') {
+            /* if (param.child_types?.length === 1){
+                // TODO
+            } else if (param.child_types!.length > 1){ */
+            this.widgets.push([param.attr_name, new TypeSelect(parent, param.child_types!)]);
+            // }
+        }
+        else {
+            let div = document.createElement('div');
+            let label = document.createElement('span');
+            label.innerText = param.label;
+            div.appendChild(label);
+            if (param.type === 'select') {
+                let select = document.createElement('select');
+                select.name = param.attr_name;
+                for (let [text, value] of param.selections!) {
+                    let option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = text;
+                    select.appendChild(option);
+                }
+                div.appendChild(select);
+                this.widgets.push([param.attr_name, select]);
+            }
+            else {
+                let input = document.createElement('input');
+                input.type = param.type;
+                input.value = param.default as string;
+                input.placeholder = param.label;
+                div.appendChild(input);
+                this.widgets.push([param.attr_name, input]);
+            }
+            parent.appendChild(div);
+        }
+    }
+
+    create() {
+        let mask = document.getElementById('menu-mask-9');
+        if (!mask) {
+            throw new Error('can not find menu mask');
+        }
+        let container = document.createElement('div');
+        container.className = 'editor-container-9';
+        let p = document.createElement('p');
+        p.textContent = `创建/编辑${this.cls.cls}`;
+        let form = document.createElement('form');
+        for (let name in this.cls.table) {
+            this.addItem(this.cls.table[name] as any, form);
+        }
+        let submit = document.createElement('button');
+        submit.type = 'submit';
+        submit.textContent = '保存';
+        submit.onclick = this.on_submit;
+        form.appendChild(submit);
+        container.appendChild(form);
+        mask.appendChild(container);
+    }
+
+    on_submit = (e: Event) => {
+        e.preventDefault();
+        let obj: __Extra = {};
+        for (let [attr, acc] of this.widgets) {
+            obj[attr] = acc.value;
+        }
+        this.edit_obj = new this.cls(obj);
+    };
+
+    get value() {
+        return this.edit_obj;
+    }
+}
+
 /**
  * J空间：存放了所有判定类型。
  */
 namespace J {
+    const select_describe: [string, string][] = [['自身', '<self>'], ['目标', '<aim>'], ['对方全体', '<opposite>'], ['己方全体', '<us>'], ['玩家全体', '<player>'], ['敌人全体', '<enemy>']];
+    const math_description: [string, string][] = [['+', '+'], ['-', '-'], ['*', '*'], ['/', '/'], ['%', '%']];
+    const compare_operator: [string, string][] = [['==', '=='], ['!=', '!='], ['>', '>'], ['<', '<'], ['>=', '>='], ['<=', '<=']];
+    let AllJudge: any[] = [];
+
     /**
      * J公用类，提供一些公用属性和帮助函数
      */
     export class J {
         /** 公用变量表 */
-        static variables: Map<string, any> = new Map<string, any>();
+        static variables: Map<string, number> = new Map<string, number>();
         /**
          * 快速判定函数，能够一次性判定多个判定器
          * @param {Readonly<J.Judge>[]} judges 判定器 数组
@@ -38,7 +301,7 @@ namespace J {
          * @param {Character} obj 判定目标
          * @returns {*}
          */
-        judge_me(arg: any, sub: Character, obj: Character): any;
+        judge_me(arg: number | undefined, sub: Character, obj: Character): number | void;
     }
     /**
      * 判定器：计算
@@ -50,6 +313,12 @@ namespace J {
         operator: string = "+";
         a: number = 0;
         b: number | Judge = 0;
+        static readonly cls = '计算判定器';
+        static table: P<FMath>[] =
+            [{ label: '运算符', attr_name: 'operator', type: 'select', selections: math_description, },
+            { label: '操作数1', attr_name: 'a', type: 'number' },
+            { label: '操作数2', attr_name: 'b', type: 'number' }
+            ];
 
         constructor({ sign = '', operator, a = 0, b }: { sign?: Signal, operator: string, a?: number, b: number | Judge; }) {
             this.sign = sign;
@@ -58,9 +327,14 @@ namespace J {
             this.b = b;
         }
 
-        judge_me(arg: any, sub: Character, obj: Character) {
+        toString() {
+            return `=>${this.a ? this.a : ''}${this.operator}${this.b}`;
+        }
+
+        judge_me(arg: number | undefined, sub: Character, obj: Character) {
             let a = arg ? arg : this.a;
             let b = typeof this.b === 'number' ? this.b : this.b.judge_me(undefined, sub, obj);
+            b = b ? b : 1;
             switch (this.operator) {
                 case "+":
                     return a + b;
@@ -79,7 +353,49 @@ namespace J {
             }
         }
     }
+    /**
+     * 判定器：限制
+     * 如果a op b成立，返回a，否则返回b
+     */
+    export class FLimit implements Judge {
+        sign: Signal = '';
+        operator: string = "+";
+        a: number = 0;
+        b: number | Judge = 0;
+        static readonly cls = '范围限制判定器';
+        static readonly table: P<FLimit>[] =
+            [{ label: '运算符', attr_name: 'operator', type: 'select', selections: compare_operator, },
+            { label: '操作数1', attr_name: 'a', type: 'number' },
+            { label: '操作数2', attr_name: 'b', type: 'number' }
+            ];
 
+        constructor({ sign = '', operator, a = 0, b }: { sign?: Signal, operator: string, a?: number, b: number | Judge; }) {
+            this.sign = sign;
+            this.operator = operator;
+            this.a = a;
+            this.b = b;
+        }
+
+        toString() {
+            return `范围限制：${this.a}${this.operator}${this.b}`;
+        }
+
+        judge_me(arg: number | undefined, sub: Character, obj: Character) {
+            let a = arg ? arg : this.a;
+            let b = typeof this.b === 'number' ? this.b : this.b.judge_me(undefined, sub, obj) || 1;
+            let flag = false;
+            switch (this.operator) {
+                case '>=': flag = a >= b; break;
+                case '>': flag = a > b; break;
+                case '==': flag = a == b; break;
+                case '<=': flag = a <= b; break;
+                case '<': flag = a < b; break;
+                case '!=': flag = a != b; break;
+                default: throw new EvalError('无效运算符');
+            }
+            return flag ? a : b;
+        }
+    }
     /**
      * 判定器：数学函数
      * 用于执行Math空间下的方法
@@ -90,6 +406,10 @@ namespace J {
         sign: Signal = '';
         func: keyof Math = "floor";
         b: number | Judge = 0;
+        static readonly cls = '数学函数判定器';
+        static readonly table: P<FFunc>[] =
+            [{ label: '数学函数', attr_name: 'func', type: 'select', selections: [['向下取整', 'floor'], ['向上取整', 'ceil']] },
+            ];
 
         constructor({ sign = '', func, b = 0 }: { sign?: Signal, func: keyof Math, b?: number | Judge; }) {
             this.sign = sign;
@@ -97,7 +417,11 @@ namespace J {
             this.b = b;
         }
 
-        judge_me(arg: any, sub: Character, obj: Character) {
+        toString() {
+            return `数学函数${String(this.func)}()`;
+        }
+
+        judge_me(arg: number | undefined, sub: Character, obj: Character) {
             let b = arg ? arg : this.b;
             b = typeof b === 'number' ? b : <number>b.judge_me(undefined, sub, obj);
             if (typeof Math[this.func] === "function") {
@@ -114,13 +438,19 @@ namespace J {
     export class FGet implements Judge {
         sign: string = '';
         variable: string = "";
+        static readonly cls = '变量读取判定器';
+        static readonly table: P<FGet>[] = [{ label: '变量名', attr_name: 'variable', type: 'text' }];
 
         constructor({ sign = '', variable }: { sign?: Signal; variable: string; }) {
             this.sign = sign;
             this.variable = variable;
         }
 
-        judge_me(arg: any, sub: Character, obj: Character) {
+        toString() {
+            return `读取变量 ${this.variable}`;
+        }
+
+        judge_me(arg: number | undefined, sub: Character, obj: Character) {
             return J.variables.get(this.variable);
         }
     }
@@ -130,14 +460,21 @@ namespace J {
     export class FSet implements Judge {
         sign: string = '';
         variable: string = "";
+        static readonly cls = '变量修改判定器';
+        static readonly table: P<FSet>[] = [{ label: '变量名', attr_name: 'variable', type: 'text' }];
+
 
         constructor({ sign = '', variable }: { sign?: Signal; variable: string; }) {
             this.sign = sign;
             this.variable = variable;
         }
 
-        judge_me(arg: any, sub: Character, obj: Character) {
-            J.variables.set(this.variable, arg);
+        toString() {
+            return `写入变量 ${this.variable}`;
+        }
+
+        judge_me(arg: number | undefined, sub: Character, obj: Character) {
+            if (arg) J.variables.set(this.variable, arg);
         }
     }
     /**
@@ -147,23 +484,29 @@ namespace J {
     export class FAccess implements Judge {
         sign: string = '';
         path: string = "";
-        rely_r: "sub" | "obj" = "obj";
+        rely_type: "sub" | "obj" = "obj";
+        static readonly cls = '变量修改判定器';
+        static readonly table: P<FAccess>[] =
+            [{ label: '源', attr_name: 'rely_type', type: 'select', selections: [['主对象', 'sub'], ['副对象', 'sub']] },
+            { label: '属性路径', attr_name: 'path', type: 'text' }];
+
 
         constructor({ sign = '', path, rely_r }: { sign?: Signal; path: string; rely_r: 'sub' | 'obj'; }) {
             this.sign = sign;
             this.path = path;
-            this.rely_r = rely_r;
+            this.rely_type = rely_r;
         }
 
-        judge_me(arg: undefined | any, sub: Character, obj: Character) {
-            let rely = this.rely_r === "obj" ? obj : sub;
+        judge_me(arg: undefined | number, sub: Character, obj: Character): number | void {
+            let rely;
+            rely = this.rely_type === "obj" ? obj : sub;
             const parts = this.path.split(".");
             for (let i = 0; i < parts.length; i++) {
                 // @ts-ignore
                 if (rely) rely = rely[parts[i]];
-                else return undefined;
+                else { rely = undefined; break; }
             }
-            return rely;
+            if (rely && typeof rely === 'number') return rely;
         }
     }
     /**
@@ -174,6 +517,10 @@ namespace J {
         sign: string = '';
         keyword: string = "";
         aim: Selector = "<self>";
+        static readonly cls = '状态查找判定器';
+        static readonly table: P<FQuery>[] =
+            [{ label: '查找目标', attr_name: 'aim', type: 'select', selections: select_describe },
+            { label: '关键词', attr_name: 'keyword', type: 'text' }];
 
         constructor({ sign = '', keyword, aim }: { sign: Signal; keyword: string; aim: Selector; }) {
             this.sign = sign;
@@ -181,7 +528,7 @@ namespace J {
             this.aim = aim;
         }
 
-        judge_me(arg: any, sub: Character, obj: Character) {
+        judge_me(arg: number | undefined, sub: Character, obj: Character) {
             let count = 0;
             let chars = Stage.select(this.aim, sub, obj);
             for (const char of chars) {
@@ -195,12 +542,17 @@ namespace J {
         }
     }
     /** 
-     * 判定器：概率返回随机值
+     * 判定器：按概率随机取值
+     * probability是分布列，value是对应的值。
      */
     export class FRandom implements Judge {
         sign: string = '';
-        private probability: number[] = new Array();
-        private value: number[] = new Array();
+        probability: number[] = new Array();
+        value: number[] = new Array();
+        static readonly cls = '随机取值判定器';
+        static readonly table: P<FRandom>[] =
+            [{ label: '概率表', attr_name: 'probability', type: 'list', addType: 'number' },
+            { label: '值表', attr_name: 'value', type: 'list', addType: 'number' }];
 
         constructor({ sign, probability, value }: { sign: string; probability: number[]; value: number[]; }) {
             this.sign = sign;
@@ -208,7 +560,7 @@ namespace J {
             this.value = value;
         }
 
-        judge_me(a: any, sub: Character, target: Character): number {
+        judge_me(a: number | undefined, sub: Character, target: Character): number {
             if (this.probability.length !== this.value.length) throw new Error('概率和值数组的长度必须相同');
 
             const sumOfProbabilities = this.probability.reduce((sum, prob) => sum + prob, 0);
@@ -232,13 +584,18 @@ namespace J {
     }
     /**
      * 执行器：概率执行判定
-     * 级联传入
+     * 传入值将被向下传入
      * 返回执行判定器的结果
      */
     export class JProbable implements Judge {
         sign: string;
-        private probability: number[] = new Array();
-        private exec: Judge[] = new Array();
+        probability: number[] = new Array();
+        exec: Judge[] = new Array();
+        static readonly cls = '概率执行器';
+        static readonly table: P<JProbable>[] =
+            [{ label: '概率表', attr_name: 'probability', type: 'list', addType: 'number' },
+            { label: '判定表', attr_name: 'exec', type: 'list', addType: 'create', child_types: AllJudge }];
+
 
         constructor({ sign, probability, exec }: { sign: string; probability: number[]; exec: Judge[]; }) {
             this.sign = sign;
@@ -246,7 +603,7 @@ namespace J {
             this.exec = exec;
         }
 
-        judge_me(arg0: any, sub: Character, obj: Character): any {
+        judge_me(arg0: number | undefined, sub: Character, obj: Character): number | void {
             if (this.probability.length !== this.exec.length) throw new Error('概率和值数组的长度必须相同');
 
             const sumOfProbabilities = this.probability.reduce((sum, prob) => sum + prob, 0);
@@ -282,6 +639,12 @@ namespace J {
         op: string = '>=';
         b: number = 1;
         exec: Executable;
+        static readonly cls = 'buff检查执行器';
+        static readonly table: P<JWith>[] =
+            [{ label: '查找目标', attr_name: 'aim', type: 'select', selections: select_describe },
+            { label: '关键词', attr_name: 'keyword', type: 'text' },
+            { label: '判定表', attr_name: 'exec', type: 'list', addType: 'create', child_types: AllJudge }];
+
 
         constructor({ sign, aim, keyword, op, b, exec }: { sign: string; aim: Selector; keyword: string; op: string; b: number; exec: Executable; }) {
             this.sign = sign;
@@ -291,7 +654,7 @@ namespace J {
             this.exec = exec;
         }
 
-        judge_me(arg: any, sub: Character, obj: Character): any {
+        judge_me(arg: number | undefined, sub: Character, obj: Character): number | void {
             let count = 0;
             let chars = Stage.select(this.aim, sub, obj);
             for (const char of chars) {
@@ -325,10 +688,17 @@ namespace J {
      */
     export class JCompare implements Judge {
         sign: string;
-        private a?: number;
-        private b: number | Evaluate = 0;
-        private op: string = '>';
-        private exec: Executable;
+        a?: number;
+        b: number | Evaluate = 0;
+        op: string = '>';
+        exec: Executable;
+        static readonly cls = '比较执行器';
+        static readonly table: P<JCompare>[] =
+            [{ label: '运算符', attr_name: 'op', type: 'select', selections: compare_operator, },
+            { label: '操作数1', attr_name: 'a', type: 'number' },
+            { label: '操作数2', attr_name: 'b', type: 'number' },
+            { label: '判定', attr_name: 'exec', type: 'object', child_types: AllJudge }];
+
 
         constructor({ sign, a = 0, b, op, exec }: { sign: string; a?: number; b: number | Evaluate; op: string; exec: Executable; }) {
             this.sign = sign;
@@ -338,7 +708,7 @@ namespace J {
             this.exec = exec;
         }
 
-        judge_me(v: number, sub: Character, obj: Character): any {
+        judge_me(v: number | undefined, sub: Character, obj: Character): number | void {
             if (this.a === undefined && v === undefined) {
                 throw new EvalError('JCompare when <a> was undefined'); // a v至少存在一个
             }
@@ -354,7 +724,7 @@ namespace J {
                 case '!=': flag = a != b; break;
                 default: throw new EvalError('无效运算符');
             }
-            if (flag) { return this.exec.judge_me(<any>undefined, sub, obj); }
+            if (flag) { return this.exec.judge_me(undefined, sub, obj); }
             else { return -1; }
         }
     }
@@ -365,13 +735,17 @@ namespace J {
     export class JBehave implements Judge {
         sign: string;
         behave: Behavior;
+        static readonly cls = '行为执行器';
+        static readonly table: P<JBehave>[] =
+            [{ label: '行为', attr_name: 'behave', type: 'object', child_types: [] },];
+
 
         constructor({ sign, behave }: { sign: string; behave: Behavior; }) {
             this.sign = sign;
             this.behave = behave;
         }
 
-        judge_me(arg0: any, sub: Character, obj: Character) {
+        judge_me(arg0: number | undefined, sub: Character, obj: Character) {
             Behavior.behave(this.behave, sub, obj, undefined, arg0);
         }
     }
@@ -383,13 +757,17 @@ namespace J {
     export class JSeries implements Judge {
         sign: string;
         judges: Judge[] = [];
+        static readonly cls = '连续执行器';
+        static readonly table: P<JBehave>[] =
+            [{ label: '判定表', attr_name: 'behave', type: 'list', addType: 'create', child_types: AllJudge },];
+
 
         constructor({ sign, judge }: { sign: string; judge: Judge[]; }) {
             this.sign = sign;
             this.judges = judge;
         }
 
-        judge_me(arg0: any, sub: Character, obj: Character) {
+        judge_me(arg0: number | undefined, sub: Character, obj: Character) {
             for (let judge of this.judges) {
                 let rv = judge.judge_me(arg0, sub, obj);
                 if (rv) arg0 = rv;
@@ -398,13 +776,37 @@ namespace J {
         }
     }
 
+    AllJudge.concat([FMath, FFunc, FQuery, FAccess, FGet, FSet, FRandom, JProbable, JCompare, JBehave, JSeries, JWith]);
+
     type Evaluate = FRandom | FMath | FFunc | FQuery | FGet;
     type Executable = JBehave | JSeries | JCompare | JProbable | JWith;
 }
 
 
 class Stat {
-    static instances: Stat[] = [];
+    static readonly cls = '状态表';
+    static readonly table: P<Stat>[] =
+        [
+            { label: '攻击', attr_name: 'attack', type: 'number' },
+            { label: '生命上限', attr_name: 'health_limit', type: 'number' },
+            { label: '现实防御', attr_name: 'real_def', type: 'number' },
+            { label: '精神防御', attr_name: 'mental_def', type: 'number' },
+            { label: '暴击率', attr_name: 'crit_rate', type: 'number' },
+            { label: '抗暴率', attr_name: 'crit_anti_rate', type: 'number' },
+            { label: '暴击伤害', attr_name: 'crit_dmg', type: 'number' },
+            { label: '暴击防御', attr_name: 'crit_def', type: 'number' },
+            { label: '创伤加成', attr_name: 'dmg_d_inc', type: 'number' },
+            { label: '受创减免', attr_name: 'dmg_t_red', type: 'number' },
+            { label: '术法威力', attr_name: 'might_incant', type: 'number' },
+            { label: '仪式威力', attr_name: 'might_ultimate', type: 'number' },
+            { label: '吸血率', attr_name: 'leech_rate', type: 'number' },
+            { label: '治疗率', attr_name: 'heal_rate', type: 'number' },
+            { label: '被治疗率', attr_name: 'heal_taken_rate', type: 'number' },
+            { label: '穿透率', attr_name: 'penetrate', type: 'number' },
+            { label: '激情上限', attr_name: 'moxie_limit', type: 'number' },
+            { label: '至终消耗', attr_name: 'ultimate_cost', type: 'number' },
+            { label: '本源提升', attr_name: 'genesis_increase', type: 'number' },
+            { label: '倍率提升', attr_name: 'power_increase', type: 'number' },];
     attack: number = 100;
     health_limit: number = 10000;
     health_now: number = 10000;
@@ -415,14 +817,14 @@ class Stat {
     crit_anti_rate: number = 0.0;
     crit_dmg: number = 0.0;
     crit_def: number = 0.0;
-    dmg_d_increase: number = 0.0;
-    dmg_t_reduce: number = 0.0;
+    dmg_d_inc: number = 0.0;
+    dmg_t_red: number = 0.0;
     might_incant: number = 0.0;
     might_ultimate: number = 0.0;
-    dmg_heal: number = 0.0;
+    // dmg_heal: number = 0.0;
     leech_rate: number = 0.0;
     heal_rate: number = 0.0;
-    heal_taken_rate: number = 0.0;
+    heal_taken_rate: number = 1.0;
     penetrate: number = 0.0;
     moxie_now: number = 0;
     moxie_limit: number = 5;
@@ -432,6 +834,10 @@ class Stat {
     power_increase: number = 0.0;
     get health_loss() {
         return this.health_limit - this.health_now;
+    }
+
+    constructor(obj: object = {}){
+        Object.assign(this, obj);
     }
     /**
      * sum_obj: 对象加法，将两个同键的值相加
@@ -467,6 +873,12 @@ class Buff {
     decrease: Readonly<J.Judge>[] = new Array<J.Judge>();
     host_character: Character = stage.Background;
 
+    static readonly cls: string = 'Buff';
+
+    constructor(obj){
+        Object.assign(this, obj);
+    }
+
     signal(sign: string, source: Character, target: Character) {
         for (let judge of this.judge) {
             if (judge.sign === sign) {
@@ -491,7 +903,7 @@ class Behavior {
     no_crit: boolean = false;
     buff?: Buff;
     static behave(behave: Behavior, origin: Character, aim: Character, spell?: Spell, ratio?: number) {
-        repl(ratio)
+        repl(ratio);
         let real_ratio = ratio !== undefined ? ratio : behave.ratio;
         for (let target of Stage.select(behave.selector, origin, aim)) {
             let statC = origin.stat;
@@ -526,8 +938,10 @@ class Behavior {
                 }
                 else {
                     let power = 1.00; // 威力
+                    let def_p = (1 - statC.penetrate);
+                    def_p = def_p < 0 ? 0 : def_p;
                     if (spell !== undefined) power = (1 + statC[<keyof Stat>('might_' + spell.energy)]);
-                    damage = real_ratio * (statC.attack - statT[<keyof Stat>(behave.damage_type + '_def')] * (1 - statC.penetrate)) * (1 + statC.dmg_d_increase - statT.dmg_t_reduce) * power * crit_part * conquer;
+                    damage = real_ratio * (statC.attack - statT[<keyof Stat>(behave.damage_type + '_def')] * def_p) * (1 + statC.dmg_d_inc - statT.dmg_t_red) * power * crit_part * conquer;
                 };
                 target.damage_me(damage);
                 origin.heal_me(damage * statC.leech_rate);
@@ -823,7 +1237,7 @@ class Stage {
     stage: Character[][] = [[], []];
     static readonly player_to_card: Record<number, number> = { 1: 4, 2: 5, 3: 7, 4: 8 };
 
-    static shuffle(array: any[]) {
+    static shuffle<T>(array: T[]) {
         for (let i = array.length - 1; i > 0; i--) {
             // Knuth's Shuffle Algorithm
             const j = Math.floor(Math.random() * (i + 1));
@@ -974,7 +1388,7 @@ var repl = console.log;
 
 function temporarily() {
     let b1 = new Buff();
-    b1.stat_inc.dmg_d_increase = 0.15;
+    b1.stat_inc.dmg_d_inc = 0.15;
     b1.name = "创伤加成+15%";
     let i1 = new Behavior();
     i1.type = 'buff';
@@ -1025,8 +1439,11 @@ function test() {
     c1.cast('1', 1, c2);
 }
 
+J.JBehave.table[0].child_types = [Behavior];
+
 function main() {
-    test();
+    let FMathE = new Editor(J.FMath);
+    FMathE.create();
 }
 main();
 
