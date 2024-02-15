@@ -1,0 +1,41 @@
+{
+    "compilerOptions": {
+        "target": "ES2019", /* 指定 ECMAScript 目标版本: 'ES3' (默认), 'ES5', 'ES2015', 'ES2016', 'ES2017', 'ES2018', 'ES2019', 'ES2020', 'ESNEXT'. */
+        "module": "commonjs", /* 指定模块代码生成: 'none', 'commonjs', 'amd', 'system', 'umd', 'es2015', 'es2020', or 'ESNEXT'. */
+        "strict": true, /* 启用所有严格的类型检查选项. */
+        "esModuleInterop": true, /* 允许默认导入从模块中导入为命名空间对象. */
+        // "outDir": "./dist", /* 重定向输出目录. */
+        // "rootDir": "./src", /* 指定输入文件的根目录. */
+        "removeComments": true, /* 不在输出文件中生成注释. */
+        "noLib": false, /* 不包含 lib.d.ts 文件. */
+        "alwaysStrict": true, /* 以严格的模式检查每个模块. */
+        "noImplicitAny": true, /* 在表达式和声明上有隐式的 'any' 类型时报错. */
+        "strictNullChecks": true, /* 启用严格的 null 检查. */
+        "strictFunctionTypes": true, /* 启用严格的函数类型检查. */
+        "strictBindCallApply": true, /* 启用严格的 bind, call, 和 apply 方法检查. */
+        "strictPropertyInitialization": true, /* 启用严格的属性初始化检查. */
+        
+        "noImplicitThis": true, /* 当 'this' 表达式值为 'any' 类型时报错. */
+        "noUnusedLocals": true, /* 报错当声明了但是未使用的局部变量. */
+        // "noUnusedParameters": true, /* 报错当声明了但是未使用的函数参数. */
+        // "noImplicitReturns": true, /* 报错当函数没有返回值时. */
+        // "noFallthroughCasesInSwitch": true, /* 报错当 switch 语句的 case 分支直接通往下一个分支. */
+        // "sourceMap": true, /* 生成相应的 '.map' 文件. */
+        // "inlineSourceMap": false, /* 在输出的 '.js' 文件中嵌入 source maps. 注意这与 'sourceMap' 选项是互斥的. */
+        // "inlineSources": false, /* 将源代码包含到 source maps 中. */
+        // "declaration": false, /* 生成相应的 '.d.ts' 文件. */
+        // "declarationMap": false, /* 为生成的声明文件也生成 source maps. */
+        "lib": [
+            "es2020",
+            "dom"
+        ], /* 指定要包含在编译中的库文件列表. */
+        "types": [] /* 指定要包含在编译中的类型声明文件列表. */
+    }
+    // ,
+    // "include": [
+    //     "src/**/*.ts"
+    // ], /* 指定要编译的 TypeScript 文件（或目录）. */
+    // "exclude": [
+    //     "node_modules"
+    // ] /* 指定不要编译的文件或目录. */
+}

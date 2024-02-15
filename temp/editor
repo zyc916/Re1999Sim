@@ -1,0 +1,248 @@
+interface Display { toString(): string; }
+
+class List<T extends Display> {
+    label: string;
+    items: Map<string, Display>;
+    types: T[];
+    add_input: HTMLInputElement;
+
+    ul: HTMLUListElement;
+    li_val: number = 0;
+    cursor: number = -1;
+
+    constructor(label = 'list', items: T[] = new Array<T>(), types: T[]) {
+        this.ul = document.createElement('ul');
+        this.add_input = document.createElement('input');
+        this.add_input.placeholder = '输入添加的内容……';
+        this.types = types;
+        this.label = label;
+        this.items = new Map<string, T>();
+    }
+
+    easyAdd() {
+        // this.add(document)
+    }
+
+    appendTag(parent: HTMLElement, items: T[], addType: 'select' | 'create' | 'ask' = 'select') {
+        let div = document.createElement('div');
+
+        let p = document.createElement('p');
+        p.textContent = this.label;
+        div.appendChild(p);
+        for (let item of items) {
+            this.add(item);
+        }
+        div.appendChild(this.ul);
+        let create_button = document.createElement('button');
+        create_button.textContent = '+';
+        switch (addType) {
+            case 'ask': this.add_input.type = 'text'; create_button.onclick = this.easyAdd; div.appendChild(this.add_input); break;
+            case 'select': // create_button.onclick = this.editor.
+        }
+        div.appendChild(create_button);
+        parent.appendChild(div);
+    }
+
+    add(item: T) {
+        let li = document.createElement('li');
+        li.className = 'list-item-9';
+        li.setAttribute('data-value', this.li_val.toString());
+        li.setAttribute('selected', '0');
+        // @ts-ignore
+        li.addEventListener('onclick', this.itemOnclick);
+        this.items.set(this.li_val.toString(), item);
+        li.textContent = item.toString();
+        this.li_val += 1;
+        this.ul.appendChild(li);
+    }
+
+    indexOf(li_v: HTMLLIElement | string) {
+        let lis = this.ul.getElementsByTagName('li');
+        let value = typeof li_v == 'string' ? li_v : li_v.getAttribute('data-value');
+        for (let i = 0; i < lis.length; i++) {
+            if (lis[i].getAttribute('data-value') == value) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /* itemOnclick(e: MouseEvent) {
+        let li = <HTMLLIElement>e.target;
+        let value = li.getAttribute('data-value')!;
+        let index = this.indexOf(value);
+        let lis = this.ul.getElementsByTagName('li');
+        lis[this.cursor].setAttribute('selected', '0');
+        this.cursor = index;
+        li.setAttribute('selected', '1');
+    } */
+
+    itemOnclick(e: MouseEvent) {
+        let li = <HTMLLIElement>e.target;
+        let value = li.getAttribute('data-value')!;
+        let index = this.indexOf(value);
+        let lis = this.ul.getElementsByTagName('li');
+        if (e.shiftKey) {
+            if (!e.ctrlKey) { for (let i = 0; i < lis.length; i++)lis[i].setAttribute('selected', '0'); }
+
+            let [min, max] = index < this.cursor ? [index, this.cursor] : [this.cursor, index];
+            for (let i = min; i < max; i++) {
+                lis[i].setAttribute('selected', '1');
+            }
+        } else if (e.ctrlKey) {
+            this.cursor = index;
+            li.setAttribute('selected', (1 - Number(lis[index].getAttribute('selected'))).toString());
+        } else {
+            for (let i = 0; i < lis.length; i++) lis[i].setAttribute('selected', '0');
+            this.cursor = index;
+            li.setAttribute('selected', '1');
+        }
+    }
+
+    delete() {
+        let lis = this.ul.getElementsByTagName('li');
+        for (let i = lis.length; i > 0; i--) {
+            if (lis[i].getAttribute('selected') === '1') {
+                this.ul.removeChild(lis[i]);
+                this.items.delete(lis[i].getAttribute('data-value')!);
+            }
+        }
+    }
+
+    result() {
+        let lis = this.ul.getElementsByTagName('li');
+        return this.items.get(lis[this.cursor].getAttribute('data-value')!);
+    }
+}
+
+
+class Parameter {
+    label: string = 'Parameter';
+    attr_name: string = 'a';
+    type: 'string' | 'number' | 'select' | 'object' | 'list' = 'string'; // list, select, string, number, object
+    child_interface?: (typeof Object);
+    child_types?: (typeof Object)[];
+    selections?: Array<[string, string]> = [['default', '请选择']];
+    default?: any;
+}
+
+class Editor<T extends Display> {
+    cls: any;
+    name: string = '对象';
+    edit_obj?: T;
+    init_from?: Editor<any>;
+    table: Record<string, Parameter> = {};
+    children: Array<[string, HTMLInputElement | HTMLSelectElement | List<any>]> = [];
+    id: number;
+    static count: number = 0;
+
+    constructor(cls: any, name: string, table: Record<string, Parameter>, edit_obj?: T, init_from?: Editor<any>) {
+        Editor.count += 1;
+        this.id = Editor.count;
+        this.cls = cls;
+        this.name = name;
+        this.table = table;
+        this.edit_obj = edit_obj;
+        this.init_from = init_from;
+    }
+
+    addItem(param: Parameter, parent: HTMLElement) {
+        if (param.type === 'list') {
+            // 创建一个子列表
+            let list: List<any>;
+            // @ts-ignore
+            if (this.edit_obj) { list = new List(param.label, this.edit_obj[param.attr_name], param.child_types!); }
+            else { list = new List(param.label, [], param.child_types!); }
+            this.children.push([param.attr_name, list]);
+        } else if (param.type === 'object') {
+            // TODO: 创建一个列表和按钮并打开子editor
+        }
+        else {
+            let div = document.createElement('div');
+            let label = document.createElement('span');
+            label.innerText = param.label;
+            div.appendChild(label);
+            if (param.type === 'select') {
+                let select = document.createElement('select');
+                select.name = param.attr_name;
+                for (let [text, value] of param.selections!) {
+                    let option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = text;
+                    select.appendChild(option);
+                }
+                div.appendChild(select);
+                this.children.push([param.attr_name, select]);
+            } else {
+                let input = document.createElement('input');
+                input.type = param.type;
+                input.value = param.default;
+                input.placeholder = param.label;
+                div.appendChild(input);
+                this.children.push([param.attr_name, input]);
+            }
+            parent.appendChild(div);
+        }
+    }
+
+    make_editor() {
+        let mask = document.getElementById('menu-mask-9');
+        if (!mask) { throw new Error('can not find menu mask'); }
+        let container = document.createElement('div');
+        container.className = 'editor-container-9';
+        let p = document.createElement('p');
+        p.textContent = `创建/编辑${this.name}`;
+        let form = document.createElement('form');
+        for (let name in this.table) {
+            this.addItem(this.table[name], form);
+        }
+        let submit = document.createElement('button');
+        submit.type = 'submit';
+        submit.textContent = '保存';
+        submit.onclick = this.on_submit(this);
+        form.appendChild(submit);
+        container.appendChild(form);
+        mask.appendChild(container);
+    }
+
+    // popup_select() {
+    //     let mask = document.getElementById('menu-mask-9');
+    //     if (!mask) { throw new Error('can not find menu mask'); }
+    //     let container = document.createElement('div');
+    //     container.className = 'editor-container-9';
+    //     let form = document.createElement('form');
+    //     let div1 = document.createElement('div');
+    //     let label = document.createElement('p');
+    //     label.innerText = '选择一个' + this.name;
+    //     let list = document.createElement('select');
+    //     list.id = 'instance_id';
+    //     for (let instance of this.instances) {
+    //         let option = document.createElement('option');
+    //         option.value = instance.id.toString();
+    //         option.innerText = instance.toText();
+    //         list.appendChild(option);
+    //     }
+    //     div1.appendChild(label);
+    //     div1.appendChild(list);
+    //     form.appendChild(div1);
+    //     container.appendChild(form);
+    //     mask.appendChild(container);
+    // }
+
+    on_submit(editor: Editor<T>) {
+        function on(e: MouseEvent) {
+            e.preventDefault();
+            let obj = Object();
+            for (let [attr, elem] of editor.children) {
+                if (elem instanceof HTMLElement) { obj[attr] = elem.value; }
+                else { obj[attr] = elem.result(); }
+            }
+            repl(new editor.cls(obj));
+        }
+        return on;
+    }
+
+    result() {
+
+    }
+}

@@ -1,0 +1,36 @@
+.simulator-container-9 {
+    aspect-ratio: 2;
+    border: 1px solid;
+    position: relative;
+}
+
+.menu-mask-9 {
+    width: 100%;
+    height: 100%;
+    background: #222A;
+    position: absolute;
+    box-shadow: none;
+    overflow: hidden;
+}
+
+@keyframes moveLeft {
+    from {
+        transform: translateX(0%);
+    }
+
+    to {
+        transform: translateX(-100%);
+        /* 结束位置在容器内 */
+    }
+}
+
+.editor-container-9 {
+    width: 50%;
+    height: 100%;
+    left: 100%;
+    background: #ebdbce;
+    position: absolute;
+    animation: moveLeft 0.5s ease-out;
+    transform: translateX(-100%);
+    box-shadow: -10px 0px 5px 5px #222A;
+}

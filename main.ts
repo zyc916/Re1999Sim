@@ -263,10 +263,10 @@ class Editor<T extends __Display> {
  * J空间：存放了所有判定类型。
  */
 namespace J {
-    const select_describe: [string, string][] = [['自身', '<self>'], ['目标', '<aim>'], ['对方全体', '<opposite>'], ['己方全体', '<us>'], ['玩家全体', '<player>'], ['敌人全体', '<enemy>']];
+    export const select_describe: [string, string][] = [['自身', '<self>'], ['目标', '<aim>'], ['对方全体', '<opposite>'], ['己方全体', '<us>'], ['玩家全体', '<player>'], ['敌人全体', '<enemy>']];
     const math_description: [string, string][] = [['+', '+'], ['-', '-'], ['*', '*'], ['/', '/'], ['%', '%']];
     const compare_operator: [string, string][] = [['==', '=='], ['!=', '!='], ['>', '>'], ['<', '<'], ['>=', '>='], ['<=', '<=']];
-    let AllJudge: any[] = [];
+    export let AllJudge: any[] = [];
 
     /**
      * J公用类，提供一些公用属性和帮助函数
@@ -758,8 +758,8 @@ namespace J {
         sign: string;
         judges: Judge[] = [];
         static readonly cls = '连续执行器';
-        static readonly table: P<JBehave>[] =
-            [{ label: '判定表', attr_name: 'behave', type: 'list', addType: 'create', child_types: AllJudge },];
+        static readonly table: P<JSeries>[] =
+            [{ label: '判定表', attr_name: 'judges', type: 'list', addType: 'create', child_types: AllJudge },];
 
 
         constructor({ sign, judge }: { sign: string; judge: Judge[]; }) {
@@ -785,6 +785,7 @@ namespace J {
 
 class Stat {
     static readonly cls = '状态表';
+    static readonly props: [string, string][] = [['攻击', 'attack'], ['生命上限', 'health_limit'], ['现实防御', 'real_def'], ['精神防御', 'mental_def'], ['暴击率', 'crit_rate'], ['抗暴率', 'crit_anti_rate'], ['暴击伤害', 'crit_dmg'], ['暴击防御', 'crit_def'], ['创伤加成', 'dmg_d_inc'], ['受创减免', 'dmg_t_red'], ['术法威力', 'might_incant'], ['仪式威力', 'might_ultimate'], ['吸血率', 'leech_rate'], ['治疗率', 'heal_rate'], ['被治疗率', 'heal_taken_rate'], ['穿透率', 'penetrate'], ['激情上限', 'moxie_limit'], ['至终消耗', 'ultimate_cost'], ['本源提升', 'genesis_increase'], ['倍率提升', 'power_increase'],];
     static readonly table: P<Stat>[] =
         [
             { label: '攻击', attr_name: 'attack', type: 'number' },
@@ -806,7 +807,8 @@ class Stat {
             { label: '激情上限', attr_name: 'moxie_limit', type: 'number' },
             { label: '至终消耗', attr_name: 'ultimate_cost', type: 'number' },
             { label: '本源提升', attr_name: 'genesis_increase', type: 'number' },
-            { label: '倍率提升', attr_name: 'power_increase', type: 'number' },];
+            { label: '倍率提升', attr_name: 'power_increase', type: 'number' },
+        ];
     attack: number = 100;
     health_limit: number = 10000;
     health_now: number = 10000;
@@ -836,7 +838,7 @@ class Stat {
         return this.health_limit - this.health_now;
     }
 
-    constructor(obj: object = {}){
+    constructor(obj: object = {}) {
         Object.assign(this, obj);
     }
     /**
@@ -857,6 +859,8 @@ class Stat {
 type StatInc = Partial<Stat>;
 
 class Buff {
+    static cat_select: [string, string][] = [['属性提升', 'stats_up'], ['属性削弱', 'stats_down'], ['状态增益', 'pos_status'], ['状态异常', 'neg_status'], ['反制', 'counter'], ['护盾', 'shield'], ['特殊', 'special']];
+
     static count = 0;
     id: number = 1;
     name: string = '';
@@ -874,8 +878,17 @@ class Buff {
     host_character: Character = stage.Background;
 
     static readonly cls: string = 'Buff';
+    static readonly table: P<Buff>[] = [
+        { label: '名称', attr_name: 'name', type: 'string' },
+        { label: '类型', attr_name: 'buff_cat', type: 'select', selections: Buff.cat_select },
+        { label: '值', attr_name: 'value', type: 'number' },
+        { label: '上限', attr_name: 'limit', type: 'number' },
+        { label: '等级', attr_name: 'level', type: 'number' },
+        { label: '附加判定表', attr_name: 'judge', type: 'list', addType: 'create', child_types: J.AllJudge },
+        { label: '减少判定表', attr_name: 'decrease', type: 'list', addType: 'create', child_types: J.AllJudge },
+    ];
 
-    constructor(obj){
+    constructor(obj: Partial<Buff>) {
         Object.assign(this, obj);
     }
 
@@ -894,6 +907,9 @@ class Item {
 }
 
 class Behavior {
+    static readonly behavior_select: [string, string][] = [['伤害', 'damage'], ['治疗', 'heal'], ['护盾', 'shield'],
+    ['状态', 'buff']];
+    static readonly damage_select: [string, string][] = [['现实', 'real'], ['精神', 'mental'], ['本源', 'genesis']];
     selector: Selector = "<aim>";
     type: "damage" | "heal" | "shield" | "buff" = 'buff';
     damage_type?: "real" | "mental" | "genesis";
@@ -902,6 +918,19 @@ class Behavior {
     ratio: number = 2.00;
     no_crit: boolean = false;
     buff?: Buff;
+
+    static readonly cls: string = '行为';
+    static readonly table: P<Behavior>[] = [
+        { label: '选择器', attr_name: 'selector', type: 'select', selections: J.select_describe },
+        { label: '类型', attr_name: 'type', type: 'select', selections: Behavior.behavior_select },
+        { label: '伤害类型（可选）', attr_name: 'damage_type', type: 'select', selections: Behavior.damage_select },
+        { label: '倍率', attr_name: 'ratio', type: 'number', default: 2.00 },
+        { label: '依赖属性', attr_name: 'rely_name', type: 'select', selections: Stat.props },
+        { label: '依赖目标', attr_name: 'rely_obj', type: 'select', selections: [['来源', 'self'], ['目标', 'aim']] },
+        { label: '添加buff', attr_name: 'buff', type: 'object', child_types: [Buff] }
+    ];
+
+
     static behave(behave: Behavior, origin: Character, aim: Character, spell?: Spell, ratio?: number) {
         repl(ratio);
         let real_ratio = ratio !== undefined ? ratio : behave.ratio;
