@@ -2,18 +2,20 @@
 "use strict";
 
 // interface __D 
-type __Extra = { [key: string]: any; };
-type __Display = { toString(): string; } & __Extra;
-type __Accessible = { value: unknown; } & __Extra;
-type __Con<T = {}> = { new(__0: object): T, table: P<T>[], cls: string; };
+type __Object = { [key: string]: any; };
+type __Display = { toString(): string; } & __Object;
+type __Con<T = {}> = { new(__0: T): T, table: P<T>[], cls: string; };
 
-class P<T> {
-    label: string = 'Parameter';
-    attr_name: keyof T = 'a' as keyof T;
-    type: string = 'string'; // 'string' | 'number' | 'select' | 'object' | 'list'
-    required?: boolean = false;
+type __Readable = { value: unknown; } & __Object;
+type __Raw<T = {}> = { [K in keyof T]: T[K];}
+
+interface P<T> {
+    label: string;
+    attr_name: keyof T;
+    type: string; // 'string' | 'number' | 'select' | 'object' | 'list'
+    required?: boolean;
     child_types?: __Con<any>[];
-    selections?: [string, string][] = [['default', '请选择']];
+    selections?: [string, string][]; // [['default', '请选择']]
     default?: unknown;
     addType?: 'text' | 'number' | 'create' | 'select';
 }
@@ -45,7 +47,6 @@ class TypeSelect {
     call = () => {
         let i = this.values.indexOf(this.select.value);
         if (i !== -1) {
-            // TODO
             this.editor = new Editor(this.types[i]);
             this.editor.create();
         }
@@ -60,7 +61,7 @@ class List<T extends __Display> {
     label: string;
     items: Array<T>;
     types: __Con[];
-    t4add: __Accessible;
+    t4add: __Readable;
 
     ul: HTMLUListElement;
     li_val: number = 0;
@@ -168,7 +169,7 @@ class List<T extends __Display> {
 class Editor<T extends __Display> {
     cls: __Con<T>;
     edit_obj: __Display;
-    widgets: [string, { value: unknown; }][] = [];
+    widgets: [keyof T, __Readable][] = [];
     constructor(cls: __Con<T>, edit_obj: __Display = {}) {
         this.cls = cls;
         this.edit_obj = edit_obj;
@@ -247,9 +248,9 @@ class Editor<T extends __Display> {
 
     on_submit = (e: Event) => {
         e.preventDefault();
-        let obj: __Extra = {};
-        for (let [attr, acc] of this.widgets) {
-            obj[attr] = acc.value;
+        let obj: __Raw<T> = {} as any;
+        for (let [attr, wid] of this.widgets) {
+            obj[attr] = wid.value as T[keyof T];
         }
         this.edit_obj = new this.cls(obj);
     };
@@ -1397,7 +1398,6 @@ function signal2(damage_sign: Signal, source: Character, target: Character) {
 
 /**
  * 通知列表中的角色。如果target未定义，它们收到的target是自己
- * @date 2024/2/8 - 13:41:54
  *
  * @param {Character} sources 被通知主体列表
  * @param {Character} target? 目标对象
@@ -1416,7 +1416,7 @@ var stage = new Stage();
 var repl = console.log;
 
 function temporarily() {
-    let b1 = new Buff();
+    let b1 = new Buff({});
     b1.stat_inc.dmg_d_inc = 0.15;
     b1.name = "创伤加成+15%";
     let i1 = new Behavior();
